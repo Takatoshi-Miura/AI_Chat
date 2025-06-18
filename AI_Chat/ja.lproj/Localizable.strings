@@ -1,0 +1,14 @@
+/* 
+  Localizable.strings
+  AI_Chat
+
+  Created by Claude on 2025/06/18.
+  
+*/
+
+"welcome_message" = "こんにちは！何かお手伝いできることはありますか？";
+"message_placeholder" = "メッセージを入力してください...";
+"send_button" = "送信";
+"error_occurred" = "エラーが発生しました。もう一度お試しください。";
+"clear_button" = "クリア";
+"ai_chat" = "AIチャット"; 
