@@ -46,7 +46,6 @@ class ChatViewModel: ObservableObject {
         errorMessage = nil
         
         do {
-            // Foundation Models Frameworkを使用してAI応答を生成
             let response = try await generateResponse(for: message)
             messages.append(ChatMessage(text: response, isFromUser: false))
         } catch {
