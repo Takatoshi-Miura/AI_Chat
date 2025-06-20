@@ -1,10 +1,3 @@
-//
-//  ChatViewModel.swift
-//  AI_Chat
-//
-//  Created by Claude on 2025/06/18.
-//
-
 import Foundation
 import Combine
 import FoundationModels
@@ -22,6 +15,8 @@ class ChatViewModel: ObservableObject {
     init() {
         // 初期化時にウェルカムメッセージを追加
         messages.append(ChatMessage(text: LocalizedStrings.welcomeMessage, isFromUser: false))
+        
+        // AIServiceのエラーメッセージは直接参照する形に変更
     }
     
     /// メッセージを送信する
@@ -48,9 +43,13 @@ class ChatViewModel: ObservableObject {
         do {
             let response = try await generateResponse(for: message)
             messages.append(ChatMessage(text: response, isFromUser: false))
+            
+            // AIServiceでエラーが発生した場合はエラーメッセージを取得
+            if let aiServiceError = aiService.errorMessage {
+                errorMessage = aiServiceError
+            }
         } catch {
             errorMessage = LocalizedStrings.errorOccurred
-            print("Error generating AI response: \(error)")
         }
         
         isLoading = false
@@ -64,5 +63,11 @@ class ChatViewModel: ObservableObject {
     /// チャット履歴をクリア
     func clearMessages() {
         messages = [ChatMessage(text: LocalizedStrings.welcomeMessage, isFromUser: false)]
+    }
+    
+    /// エラーメッセージをクリア
+    func clearError() {
+        errorMessage = nil
+        aiService.clearError()
     }
 } 

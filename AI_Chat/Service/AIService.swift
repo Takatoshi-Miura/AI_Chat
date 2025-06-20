@@ -1,19 +1,19 @@
-//
-//  AIService.swift
-//  AI_Chat
-//
-//  Created by Claude on 2025/06/18.
-//
-
 import Foundation
+import Combine
+import SwiftUI
 import FoundationModels
 
-/// AIとの通信を管理するサービス
 @MainActor
 class AIService {
+    var errorMessage: String?
     
     init() {
         // Foundation Models Frameworkの初期化
+    }
+    
+    /// エラーメッセージをクリア
+    func clearError() {
+        errorMessage = nil
     }
     
     /// メッセージをAIに送信して応答を取得
@@ -22,7 +22,6 @@ class AIService {
             let response = try await performAIRequest(message: message)
             return response
         } catch {
-            print("AI応答生成エラー: \(error)")
             throw AIServiceError.responseGenerationFailed
         }
     }
@@ -34,7 +33,6 @@ class AIService {
             let response = try await generateLLMResponse(systemPrompt: systemPrompt, userMessage: message)
             return response
         } catch {
-            print("Foundation Models Framework Error: \(error)")
             throw AIServiceError.responseGenerationFailed
         }
     }
@@ -46,52 +44,59 @@ class AIService {
             let response = try await session.respond(to: userMessage)
             return response.content
         } catch let error {
-            print("🔴 === Foundation Models Framework Error ===")
-            print("Error: \(error)")
-            print("Error Type: \(type(of: error))")
+            // エラーメッセージを構築
+            var dialogMessage = "Apple Intelligence エラー\n\n"
             
-            // 具体的なエラーメッセージを確認
             if let nsError = error as NSError? {
-                print("NSError Domain: \(nsError.domain)")
-                print("NSError Code: \(nsError.code)")
-                print("NSError Description: \(nsError.localizedDescription)")
-                if let failureReason = nsError.localizedFailureReason {
-                    print("NSError Failure Reason: \(failureReason)")
+                // 具体的なエラー原因の特定と解決策
+                let errorString = error.localizedDescription.lowercased()
+                
+                if errorString.contains("modelcatalog") {
+                    dialogMessage += "モデルアセットが利用できません。\n\n"
+                    dialogMessage += "解決策:\n"
+                    dialogMessage += "• 設定 > Apple Intelligence & Siri を開く\n"
+                    dialogMessage += "• Apple Intelligence がオンになっているか確認\n"
+                    dialogMessage += "• モデルのダウンロードが完了しているか確認\n"
+                    dialogMessage += "• デバイスが対応機種か確認\n\n"
+                } else if errorString.contains("network") {
+                    dialogMessage += "ネットワーク接続に問題があります。\n\n"
+                    dialogMessage += "解決策:\n"
+                    dialogMessage += "• インターネット接続を確認\n"
+                    dialogMessage += "• しばらく時間をおいてから再試行\n\n"
+                } else if errorString.contains("auth") {
+                    dialogMessage += "認証に問題があります。\n\n"
+                    dialogMessage += "解決策:\n"
+                    dialogMessage += "• Apple IDでサインインしているか確認\n"
+                    dialogMessage += "• デバイスを再起動\n\n"
+                } else if errorString.contains("quota") {
+                    dialogMessage += "使用量制限に達しました。\n\n"
+                    dialogMessage += "しばらく時間をおいてから再度お試しください。\n\n"
+                } else {
+                    dialogMessage += "予期しないエラーが発生しました。\n\n"
                 }
-                if let userInfo = nsError.userInfo as? [String: Any] {
-                    print("NSError UserInfo: \(userInfo)")
-                }
-            }
-            
-            // より詳細なエラー分析
-            let errorString = error.localizedDescription.lowercased()
-            print("🔍 Error Analysis:")
-            
-            if errorString.contains("modelcatalog") {
-                print("❌ Model Catalog Error - モデルアセットが見つかりません")
-                print("💡 対処法: 設定 > Apple Intelligence & Siri でモデルダウンロードを確認")
-            } else if errorString.contains("network") {
-                print("❌ Network Error - ネットワーク接続の問題")
-            } else if errorString.contains("auth") {
-                print("❌ Authentication Error - 認証の問題")
-            } else if errorString.contains("quota") {
-                print("❌ Quota Error - 使用量制限に達しました")
+                
+                // 詳細な技術情報を追加
+                dialogMessage += "詳細情報:\n"
+                dialogMessage += "Domain: \(nsError.domain)\n"
+                dialogMessage += "Code: \(nsError.code)\n"
+                dialogMessage += "Description: \(nsError.localizedDescription)"
+                
             } else {
-                print("❌ Unknown Error - 未知のエラー")
+                dialogMessage += "エラー: \(error.localizedDescription)"
             }
             
-            print("🔄 フォールバック実装に切り替えます")
-            print("============================================")
+            dialogMessage += "\n\nフォールバック実装で応答します。"
             
-            // 全てのエラーでフォールバック実装を使用
+            // エラーメッセージを設定
+            self.errorMessage = dialogMessage
+            
+            // フォールバック実装を使用
             return generateFallbackResponse(for: userMessage)
         }
     }
     
     /// フォールバック用の応答生成（モデルが利用できない場合）
     private func generateFallbackResponse(for userMessage: String) -> String {
-        print("📱 フォールバック実装を使用してメッセージ「\(userMessage)」に応答します")
-        
         let responses = [
             "「\(userMessage)」についてお答えします。\n\n※ 現在Apple Intelligenceが利用できないため、開発モードで動作しています。実際のAI機能を利用するには、対応デバイスでApple Intelligenceを有効にしてください。",
             "ご質問の「\(userMessage)」について考えてみます。\n\n※ Apple Intelligenceモデルが準備中です。しばらくお待ちください。",
@@ -99,9 +104,7 @@ class AIService {
             "なるほど、「\(userMessage)」ですね。\n\n※ Apple Intelligence機能の準備が完了次第、より詳細な回答が可能になります。"
         ]
         
-        let response = responses.randomElement() ?? "申し訳ございません。AIモデルの準備中です。設定でApple Intelligenceを確認してください。"
-        print("📤 フォールバック応答: \(response)")
-        return response
+        return responses.randomElement() ?? "申し訳ございません。AIモデルの準備中です。設定でApple Intelligenceを確認してください。"
     }
 }
 

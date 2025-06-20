@@ -1,10 +1,3 @@
-//
-//  MessageRowView.swift
-//  AI_Chat
-//
-//  Created by Claude on 2025/06/18.
-//
-
 import SwiftUI
 
 struct MessageRowView: View {

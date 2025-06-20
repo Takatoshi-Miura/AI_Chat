@@ -1,10 +1,3 @@
-//
-//  ChatMessage.swift
-//  AI_Chat
-//
-//  Created by Claude on 2025/06/18.
-//
-
 import Foundation
 
 /// チャットメッセージを表すモデル

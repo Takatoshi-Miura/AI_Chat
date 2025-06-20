@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  AI_Chat
-//
-//  Created by Takatoshi Miura on 2025/06/18.
-//
-
 import SwiftUI
 import Combine
 
@@ -22,6 +15,21 @@ struct ContentView: View {
         .task {
             await initializationManager.initialize()
         }
+        .alert("Apple Intelligence 初期化エラー", isPresented: .constant(initializationManager.errorMessage != nil)) {
+            Button("OK") {
+                initializationManager.clearError()
+            }
+            Button("再試行") {
+                initializationManager.clearError()
+                Task {
+                    await initializationManager.initialize()
+                }
+            }
+        } message: {
+            if let errorMessage = initializationManager.errorMessage {
+                Text(errorMessage)
+            }
+        }
     }
 }
 
@@ -35,6 +43,11 @@ struct LoadingView: View {
             Text("AIチャットを初期化中...")
                 .font(.headline)
                 .foregroundColor(.secondary)
+            
+            Text("Apple Intelligenceの状態を確認しています")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))

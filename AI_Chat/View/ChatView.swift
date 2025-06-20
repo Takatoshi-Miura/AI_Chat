@@ -1,10 +1,3 @@
-//
-//  ChatView.swift
-//  AI_Chat
-//
-//  Created by Claude on 2025/06/18.
-//
-
 import SwiftUI
 import Combine
 
@@ -73,7 +66,13 @@ struct ChatView: View {
         }
         .alert("エラー", isPresented: .constant(viewModel.errorMessage != nil)) {
             Button("OK") {
-                viewModel.errorMessage = nil
+                viewModel.clearError()
+            }
+            Button("再試行") {
+                viewModel.clearError()
+                if !viewModel.inputText.isEmpty {
+                    viewModel.sendMessage()
+                }
             }
         } message: {
             Text(viewModel.errorMessage ?? "")

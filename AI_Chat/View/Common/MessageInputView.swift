@@ -1,10 +1,3 @@
-//
-//  MessageInputView.swift
-//  AI_Chat
-//
-//  Created by Claude on 2025/06/18.
-//
-
 import SwiftUI
 import Combine
 
@@ -49,7 +42,7 @@ struct MessageInputView: View {
 }
 
 #Preview {
-    @State var inputText = ""
+    @Previewable @State var inputText = ""
     @FocusState var isInputFocused: Bool
     
     return MessageInputView(
