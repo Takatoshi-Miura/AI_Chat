@@ -26,22 +26,10 @@ class InitializationManager: ObservableObject {
     /// Apple Intelligenceの状態をチェック
     private func checkAppleIntelligenceStatus() async {
         if #available(iOS 18.1, macOS 15.1, *) {
-            // デバイス情報の確認
-            let deviceModel = await getDeviceModel()
-            print("Device Model: \(deviceModel)")
-            
-            // 実機かシミュレーターかを確認
-            #if targetEnvironment(simulator)
-            print("⚠️ Running on Simulator - Apple Intelligence not available")
-            print("Please run on actual device for Apple Intelligence features")
-            #else
-            print("✅ Running on real device")
-            
             // Foundation Models Frameworkの利用可能性テスト
             do {
                 let testSession = LanguageModelSession(instructions: "Test")
-                let testResponse = try await testSession.respond(to: "Hello")
-                print("📝 Test response: \(testResponse.content)")
+                _ = try await testSession.respond(to: "Hello")
             } catch {
                 // エラーメッセージを構築してダイアログ表示用に設定
                 var dialogMessage = "Apple Intelligence初期化エラー\n\n"
@@ -82,26 +70,9 @@ class InitializationManager: ObservableObject {
                 // エラーメッセージを設定（ダイアログ表示用）
                 self.errorMessage = dialogMessage
             }
-            #endif
         } else {
             print("Apple Intelligence: Not available on this OS version")
             print("Requires iOS 18.1+ or macOS 15.1+")
         }
-    }
-    
-    /// デバイスモデル情報を取得
-    private func getDeviceModel() async -> String {
-        #if targetEnvironment(simulator)
-        return "Simulator"
-        #else
-        var systemInfo = utsname()
-        uname(&systemInfo)
-        let machineMirror = Mirror(reflecting: systemInfo.machine)
-        let identifier = machineMirror.children.reduce("") { identifier, element in
-            guard let value = element.value as? Int8, value != 0 else { return identifier }
-            return identifier + String(UnicodeScalar(UInt8(value)))
-        }
-        return identifier
-        #endif
     }
 } 

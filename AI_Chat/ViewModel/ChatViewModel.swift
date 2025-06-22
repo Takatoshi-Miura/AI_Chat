@@ -15,8 +15,6 @@ class ChatViewModel: ObservableObject {
     init() {
         // 初期化時にウェルカムメッセージを追加
         messages.append(ChatMessage(text: LocalizedStrings.welcomeMessage, isFromUser: false))
-        
-        // AIServiceのエラーメッセージは直接参照する形に変更
     }
     
     /// メッセージを送信する
