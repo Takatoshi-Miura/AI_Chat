@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		8D25C2682E0F8E6600E61E5C /* MCP in Frameworks */ = {isa = PBXBuildFile; productRef = 8D25C2672E0F8E6600E61E5C /* MCP */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		8D25C21A2E0238F100E61E5C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				8D25C2682E0F8E6600E61E5C /* MCP in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = AI_Chat;
 			packageProductDependencies = (
+				8D25C2672E0F8E6600E61E5C /* MCP */,
 			);
 			productName = AI_Chat;
 			productReference = 8D25C20C2E0238EF00E61E5C /* AI_Chat.app */;
@@ -196,6 +202,9 @@
 			);
 			mainGroup = 8D25C2032E0238EF00E61E5C;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				8D25C2662E0F8E6600E61E5C /* XCRemoteSwiftPackageReference "swift-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 8D25C20D2E0238EF00E61E5C /* Products */;
 			projectDirPath = "";
@@ -573,6 +582,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		8D25C2662E0F8E6600E61E5C /* XCRemoteSwiftPackageReference "swift-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/modelcontextprotocol/swift-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		8D25C2672E0F8E6600E61E5C /* MCP */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 8D25C2662E0F8E6600E61E5C /* XCRemoteSwiftPackageReference "swift-sdk" */;
+			productName = MCP;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 8D25C2042E0238EF00E61E5C /* Project object */;
 }
