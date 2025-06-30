@@ -41,7 +41,7 @@ class AIService {
     private func generateLLMResponse(systemPrompt: String, userMessage: String) async throws -> String {
         do {
             let session = LanguageModelSession(
-                tools: [WeatherTool()],
+                tools: [WeatherMCPTool()],
                 instructions: systemPrompt
             )
             
@@ -50,49 +50,11 @@ class AIService {
         } catch let error {
             // エラーメッセージを構築
             var dialogMessage = "Apple Intelligence エラー\n\n"
-            if let nsError = error as NSError? {
-                // 具体的なエラー原因の特定と解決策
+            if (error as NSError?) != nil {
                 let errorString = error.localizedDescription.lowercased()
-                
-                if errorString.contains("modelcatalog") {
-                    dialogMessage += "モデルアセットが利用できません。\n\n"
-                    dialogMessage += "解決策:\n"
-                    dialogMessage += "• 設定 > Apple Intelligence & Siri を開く\n"
-                    dialogMessage += "• Apple Intelligence がオンになっているか確認\n"
-                    dialogMessage += "• モデルのダウンロードが完了しているか確認\n"
-                    dialogMessage += "• デバイスが対応機種か確認\n\n"
-                } else if errorString.contains("network") {
-                    dialogMessage += "ネットワーク接続に問題があります。\n\n"
-                    dialogMessage += "解決策:\n"
-                    dialogMessage += "• インターネット接続を確認\n"
-                    dialogMessage += "• しばらく時間をおいてから再試行\n\n"
-                } else if errorString.contains("auth") {
-                    dialogMessage += "認証に問題があります。\n\n"
-                    dialogMessage += "解決策:\n"
-                    dialogMessage += "• Apple IDでサインインしているか確認\n"
-                    dialogMessage += "• デバイスを再起動\n\n"
-                } else if errorString.contains("quota") {
-                    dialogMessage += "使用量制限に達しました。\n\n"
-                    dialogMessage += "しばらく時間をおいてから再度お試しください。\n\n"
-                } else {
-                    dialogMessage += "予期しないエラーが発生しました。\n\n"
-                }
-                
-                // 詳細な技術情報を追加
-                dialogMessage += "詳細情報:\n"
-                dialogMessage += "Domain: \(nsError.domain)\n"
-                dialogMessage += "Code: \(nsError.code)\n"
-                dialogMessage += "Description: \(nsError.localizedDescription)"
-                
-            } else {
-                dialogMessage += "エラー: \(error.localizedDescription)"
+                dialogMessage += errorString
             }
-            
-            dialogMessage += "\n\n申し訳ございません。AIモデルの準備中です。設定でApple Intelligenceを確認してください。"
-            
-            // エラーメッセージを設定
             self.errorMessage = dialogMessage
-            
             return dialogMessage
         }
     }
