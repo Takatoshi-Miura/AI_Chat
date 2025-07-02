@@ -5,10 +5,15 @@ import FoundationModels
 
 @MainActor
 class AIService {
+    var session: LanguageModelSession
     var errorMessage: String?
     
     init() {
-        // Foundation Models Frameworkの初期化
+        let systemPrompt = "あなたは親切で知識豊富なAIアシスタントです。日本語で丁寧に回答してください。"
+        session = LanguageModelSession(
+            tools: [WeatherMCPTool()],
+            instructions: systemPrompt
+        )
     }
     
     /// エラーメッセージをクリア
@@ -29,8 +34,7 @@ class AIService {
     /// Foundation Models Frameworkを使用してAIリクエストを実行
     private func performAIRequest(message: String) async throws -> String {
         do {
-            let systemPrompt = "あなたは親切で知識豊富なAIアシスタントです。日本語で丁寧に回答してください。Tool Callingを使用した際はそのことを回答に含めてください。"
-            let response = try await generateLLMResponse(systemPrompt: systemPrompt, userMessage: message)
+            let response = try await generateLLMResponse(userMessage: message)
             return response
         } catch {
             throw AIServiceError.responseGenerationFailed
@@ -38,13 +42,8 @@ class AIService {
     }
     
     /// Foundation Models Frameworkを使用してLLM応答を生成（Tool Calling対応）
-    private func generateLLMResponse(systemPrompt: String, userMessage: String) async throws -> String {
+    private func generateLLMResponse(userMessage: String) async throws -> String {
         do {
-            let session = LanguageModelSession(
-                tools: [WeatherMCPTool()],
-                instructions: systemPrompt
-            )
-            
             let response = try await session.respond(to: userMessage)
             return response.content
         } catch let error {

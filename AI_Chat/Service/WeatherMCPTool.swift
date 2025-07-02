@@ -34,7 +34,7 @@ struct WeatherMCPTool: FoundationModels.Tool {
             let mcpClient = MCPClientService()
             
             // リモートMCPサーバーのエンドポイント
-            guard let endpoint = URL(string: "https://mcp-weather-prod.get-weather.workers.dev") else {
+            guard let endpoint = URL(string: "https://mcp-weather.get-weather.workers.dev") else {
                 return ModelToolResult.failure("無効なエンドポイントURL")
             }
             
