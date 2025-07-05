@@ -9,58 +9,18 @@ struct ChatView: View {
         NavigationView {
             VStack(spacing: 0) {
                 // メッセージリスト
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(spacing: 12) {
-                            ForEach(viewModel.messages, id: \.id) { message in
-                                MessageRowView(message: message)
-                                    .id(message.id)
-                            }
-                            
-                            // ローディング表示
-                            if viewModel.isLoading {
-                                HStack {
-                                    ProgressView()
-                                        .scaleEffect(0.8)
-                                    Text("思考中...")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                }
-                                .padding(.horizontal)
-                                .padding(.vertical, 8)
-                            }
-                        }
-                        .padding()
-                    }
-                    .onChange(of: viewModel.messages.count) { _, _ in
-                        // 新しいメッセージが追加されたときにスクロール
-                        if let lastMessage = viewModel.messages.last {
-                            withAnimation(.easeOut(duration: 0.3)) {
-                                proxy.scrollTo(lastMessage.id, anchor: .bottom)
-                            }
-                        }
-                    }
-                }
+                messageListView
                 
                 Divider()
                 
                 // 入力エリア
-                MessageInputView(
-                    inputText: $viewModel.inputText,
-                    isInputFocused: $isInputFocused,
-                    onSend: viewModel.sendMessage
-                )
-                .disabled(viewModel.isLoading)
+                inputAreaView
             }
             .navigationTitle(LocalizedStrings.aiChat)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(LocalizedStrings.clearButton) {
-                        viewModel.clearMessages()
-                    }
-                    .foregroundColor(.blue)
+                    clearButton
                 }
             }
         }
@@ -77,6 +37,54 @@ struct ChatView: View {
         } message: {
             Text(viewModel.errorMessage ?? "")
         }
+    }
+    
+    // MARK: - View Components
+    
+    private var messageListView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(viewModel.messages, id: \.id) { message in
+                        MessageRowView(message: message)
+                            .id(message.id)
+                            .transition(.opacity.combined(with: .scale))
+                    }
+                }
+                .padding()
+                .animation(.easeInOut(duration: 0.3), value: viewModel.messages.count)
+            }
+            .onChange(of: viewModel.messages.count) { _, _ in
+                if let lastMessage = viewModel.messages.last {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    }
+                }
+            }
+            .onChange(of: viewModel.messages) { _, _ in
+                if let lastMessage = viewModel.messages.last {
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                    }
+                }
+            }
+        }
+    }
+    
+    private var inputAreaView: some View {
+        MessageInputView(
+            inputText: $viewModel.inputText,
+            isInputFocused: $isInputFocused,
+            onSend: viewModel.sendMessage
+        )
+        .disabled(viewModel.isLoading)
+    }
+    
+    private var clearButton: some View {
+        Button(LocalizedStrings.clearButton) {
+            viewModel.clearMessages()
+        }
+        .foregroundColor(.blue)
     }
 }
 

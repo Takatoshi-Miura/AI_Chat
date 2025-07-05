@@ -28,7 +28,7 @@ class MCPClientService: ObservableObject {
     /// MCPサーバーに接続
     /// - Parameter endpoint: 接続先のURL
     func connect(to endpoint: URL) async throws {
-        print("MCPサーバーへの接続を開始: \(endpoint)")
+        MCPStepNotificationService.shared.notifyStep("MCPサーバーへの接続を開始しています...")
         
         // HTTPトランスポート作成
         transport = HTTPClientTransport(
@@ -42,21 +42,8 @@ class MCPClientService: ObservableObject {
         
         // 接続実行
         let result = try await client.connect(transport: transport)
-        
-        // サーバー機能の確認
-        print("サーバー機能:")
-        if result.capabilities.tools != nil {
-            print("- ツール機能: 利用可能")
-        }
-        if result.capabilities.resources != nil {
-            print("- リソース機能: 利用可能")
-        }
-        if result.capabilities.prompts != nil {
-            print("- プロンプト機能: 利用可能")
-        }
-        
         isConnected = true
-        print("MCPサーバーに正常に接続しました")
+        MCPStepNotificationService.shared.notifyStep("✅ MCP サーバーに接続完了")
         
         // 利用可能な機能を取得
         await loadAvailableCapabilities()
@@ -64,7 +51,7 @@ class MCPClientService: ObservableObject {
     
     /// MCPサーバーから切断
     func disconnect() async {
-        print("MCPサーバーから切断中...")
+        MCPStepNotificationService.shared.notifyStep("MCPサーバーから切断しています...")
         
         await client.disconnect()
         transport = nil
@@ -93,6 +80,13 @@ class MCPClientService: ObservableObject {
         return result.tools
     }
     
+    /// 指定されたツールが利用可能かどうかを確認
+    /// - Parameter toolName: ツール名
+    /// - Returns: ツールが利用可能な場合はtrue
+    func isToolAvailable(_ toolName: String) -> Bool {
+        return availableTools.contains { $0.name == toolName }
+    }
+    
     /// ツールを呼び出し
     /// - Parameters:
     ///   - toolName: ツール名
@@ -102,6 +96,10 @@ class MCPClientService: ObservableObject {
         guard isConnected else {
             throw MCPError.invalidRequest("サーバーに接続されていません")
         }
+        
+        // 引数の詳細を表示
+        let argumentsText = arguments.isEmpty ? "なし" : arguments.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
+        MCPStepNotificationService.shared.notifyStep("MCPツール '\(toolName)' を実行中... (引数: \(argumentsText))")
         
         print("ツール '\(toolName)' を実行中...")
         
@@ -113,8 +111,10 @@ class MCPClientService: ObservableObject {
         let errorFlag = isError ?? false
         if errorFlag {
             print("ツール '\(toolName)' の実行でエラーが発生しました")
+            MCPStepNotificationService.shared.notifyStep("❌ MCPツール '\(toolName)' の実行でエラーが発生しました")
         } else {
             print("ツール '\(toolName)' が正常に実行されました")
+            MCPStepNotificationService.shared.notifyStep("✅ MCPツール '\(toolName)' の実行が完了しました")
         }
         
         // コンテンツを文字列に変換
@@ -188,9 +188,15 @@ class MCPClientService: ObservableObject {
     
     /// 利用可能な機能を取得して状態を更新
     private func loadAvailableCapabilities() async {
+        MCPStepNotificationService.shared.notifyStep("MCP サーバーの利用可能な機能を確認しています...")
+        
         do {
             // ツール一覧を取得
             availableTools = try await listTools()
+            if !availableTools.isEmpty {
+                let toolNames = availableTools.map { $0.name }.joined(separator: ", ")
+                MCPStepNotificationService.shared.notifyStep("利用可能なMCPツール: \(toolNames)")
+            }
         } catch {
             print("ツール一覧の取得に失敗: \(error)")
         }
@@ -198,6 +204,9 @@ class MCPClientService: ObservableObject {
         do {
             // リソース一覧を取得
             availableResources = try await listResources()
+            if !availableResources.isEmpty {
+                MCPStepNotificationService.shared.notifyStep("リソース機能も利用可能です")
+            }
         } catch {
             print("リソース一覧の取得に失敗: \(error)")
         }
@@ -205,6 +214,9 @@ class MCPClientService: ObservableObject {
         do {
             // プロンプト一覧を取得
             availablePrompts = try await listPrompts()
+            if !availablePrompts.isEmpty {
+                MCPStepNotificationService.shared.notifyStep("プロンプト機能も利用可能です")
+            }
         } catch {
             print("プロンプト一覧の取得に失敗: \(error)")
         }

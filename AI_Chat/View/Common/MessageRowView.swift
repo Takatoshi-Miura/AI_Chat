@@ -13,18 +13,21 @@ struct MessageRowView: View {
                 Spacer()
             }
         }
+        .padding(.horizontal, 8)
+        .animation(.easeInOut(duration: 0.2), value: message.text)
     }
     
     private var userMessageView: some View {
         VStack(alignment: .trailing, spacing: 4) {
             Text(message.text)
-                .padding(12)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
                 .background(Color.blue)
                 .foregroundColor(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .trailing)
+                .cornerRadius(18)
+                .textSelection(.enabled)
             
-            Text(formatTime(message.timestamp))
+            Text(formatTimestamp(message.timestamp))
                 .font(.caption2)
                 .foregroundColor(.secondary)
         }
@@ -32,31 +35,47 @@ struct MessageRowView: View {
     
     private var aiMessageView: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(message.text)
-                .padding(12)
-                .background(Color(.systemGray5))
-                .foregroundColor(.primary)
-                .clipShape(RoundedRectangle(cornerRadius: 16))
-                .frame(maxWidth: UIScreen.main.bounds.width * 0.7, alignment: .leading)
+            HStack(alignment: .top, spacing: 8) {
+                // AIアバター
+                Circle()
+                    .fill(Color.gray.opacity(0.3))
+                    .frame(width: 32, height: 32)
+                    .overlay(
+                        Text("AI")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                    )
+                
+                // メッセージ内容
+                Text(message.text)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(18)
+                    .textSelection(.enabled)
+            }
             
-            Text(formatTime(message.timestamp))
+            Text(formatTimestamp(message.timestamp))
                 .font(.caption2)
                 .foregroundColor(.secondary)
+                .padding(.leading, 40)
         }
     }
     
-    private func formatTime(_ date: Date) -> String {
+    private func formatTimestamp(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
-        formatter.locale = Locale(identifier: "ja_JP")
         return formatter.string(from: date)
     }
 }
 
 #Preview {
-    VStack {
-        MessageRowView(message: ChatMessage(text: "こんにちは！テストメッセージです。", isFromUser: true))
-        MessageRowView(message: ChatMessage(text: "こんにちは！AI応答のテストメッセージです。長いテキストでも適切に表示されることを確認します。", isFromUser: false))
+    VStack(spacing: 16) {
+        MessageRowView(message: ChatMessage(text: "こんにちは！", isFromUser: true))
+        MessageRowView(message: ChatMessage(text: "こんにちは！何かお手伝いできることはありますか？", isFromUser: false))
+        MessageRowView(message: ChatMessage(text: "🔗 MCP サーバーへの接続を開始しています...", isFromUser: false))
+        MessageRowView(message: ChatMessage(text: "最終的な回答です。", isFromUser: false))
     }
     .padding()
 } 

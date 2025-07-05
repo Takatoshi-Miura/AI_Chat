@@ -29,26 +29,37 @@ struct WeatherMCPTool: FoundationModels.Tool {
     /// 実際のMCPツール呼び出しを実行
     @MainActor
     private func performWeatherToolCall(cityName: String) async -> ModelToolResult {
+        let mcpClient = MCPClientService()
+        
         do {
-            // MCPClientServiceを初期化
-            let mcpClient = MCPClientService()
-            
             // リモートMCPサーバーのエンドポイント
             guard let endpoint = URL(string: "https://mcp-weather.get-weather.workers.dev") else {
                 return ModelToolResult.failure("無効なエンドポイントURL")
             }
             
+            MCPStepNotificationService.shared.notifyStep("天気データ取得を開始します (都市: \(cityName))")
+            
             // サーバーに接続
             try await mcpClient.connect(to: endpoint)
+            
+            // 特定のツールが利用可能かチェック
+            let toolName = "get_weather_overview"
+            guard mcpClient.isToolAvailable(toolName) else {
+                await mcpClient.disconnect()
+                let availableTools = mcpClient.availableTools.map { $0.name }.joined(separator: ", ")
+                return ModelToolResult.failure("ツール '\(toolName)' は利用できません。利用可能なツール: \(availableTools)")
+            }
             
             // ツールの引数を準備
             let arguments: [String: Value] = [
                 "city": mcpClient.stringValue(cityName)
             ]
             
+            print("ツール '\(toolName)' を呼び出し中...")
+            
             // get_weather_overviewツールを呼び出し
             let (content, isError) = try await mcpClient.callTool(
-                name: "get_weather_overview",
+                name: toolName,
                 arguments: arguments
             )
             
@@ -57,13 +68,21 @@ struct WeatherMCPTool: FoundationModels.Tool {
             
             // 結果を返す
             if isError {
+                print("天気データ取得エラー: \(content)")
                 return ModelToolResult.failure("天気データの取得中にエラーが発生しました: \(content)")
             } else {
+                print("天気データ取得成功")
+                MCPStepNotificationService.shared.notifyStep("天気データの取得が完了しました")
                 return ModelToolResult.success(content)
             }
             
         } catch {
-            return ModelToolResult.failure("MCP接続エラー: \(error.localizedDescription)")
+            // 確実に接続を切断
+            await mcpClient.disconnect()
+            
+            let errorMessage = "MCP接続エラー: \(error.localizedDescription)"
+            print(errorMessage)
+            return ModelToolResult.failure(errorMessage)
         }
     }
 }
