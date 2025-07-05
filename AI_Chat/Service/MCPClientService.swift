@@ -11,8 +11,6 @@ class MCPClientService: ObservableObject {
     private var transport: HTTPClientTransport?
     @Published var isConnected = false
     @Published var availableTools: [Tool] = []
-    @Published var availableResources: [Resource] = []
-    @Published var availablePrompts: [Prompt] = []
     
     // MARK: - Initialization
     init(appName: String = "AI_Chat", appVersion: String = "1.0.0") {
@@ -41,12 +39,12 @@ class MCPClientService: ObservableObject {
         }
         
         // 接続実行
-        let result = try await client.connect(transport: transport)
+        _ = try await client.connect(transport: transport)
         isConnected = true
         MCPStepNotificationService.shared.notifyStep("✅ MCP サーバーに接続完了")
         
-        // 利用可能な機能を取得
-        await loadAvailableCapabilities()
+        // ツール一覧を取得
+        availableTools = try await listTools()
     }
     
     /// MCPサーバーから切断
@@ -59,24 +57,25 @@ class MCPClientService: ObservableObject {
         
         // 状態をリセット
         availableTools = []
-        availableResources = []
-        availablePrompts = []
         
-        print("MCPサーバーから切断しました")
+        MCPStepNotificationService.shared.notifyStep("MCPサーバーから切断しました")
     }
     
     // MARK: - Tools
     
     /// 利用可能なツール一覧を取得
-    func listTools() async throws -> [Tool] {
+    private func listTools() async throws -> [Tool] {
         guard isConnected else {
             throw MCPError.invalidRequest("サーバーに接続されていません")
         }
         
-        print("ツール一覧を取得中...")
         let result = try await client.listTools()
-        
-        print("利用可能なツール: \(result.tools.map { $0.name }.joined(separator: ", "))")
+        if !result.tools.isEmpty {
+            let toolNames = result.tools.map { $0.name }.joined(separator: ", ")
+            MCPStepNotificationService.shared.notifyStep("利用可能なMCPツール: \(toolNames)")
+        } else {
+            MCPStepNotificationService.shared.notifyStep("利用可能なMCPツールが見つかりませんでした")
+        }
         return result.tools
     }
     
@@ -101,8 +100,6 @@ class MCPClientService: ObservableObject {
         let argumentsText = arguments.isEmpty ? "なし" : arguments.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
         MCPStepNotificationService.shared.notifyStep("MCPツール '\(toolName)' を実行中... (引数: \(argumentsText))")
         
-        print("ツール '\(toolName)' を実行中...")
-        
         let (content, isError) = try await client.callTool(
             name: toolName,
             arguments: arguments
@@ -110,116 +107,14 @@ class MCPClientService: ObservableObject {
         
         let errorFlag = isError ?? false
         if errorFlag {
-            print("ツール '\(toolName)' の実行でエラーが発生しました")
             MCPStepNotificationService.shared.notifyStep("❌ MCPツール '\(toolName)' の実行でエラーが発生しました")
         } else {
-            print("ツール '\(toolName)' が正常に実行されました")
             MCPStepNotificationService.shared.notifyStep("✅ MCPツール '\(toolName)' の実行が完了しました")
         }
         
         // コンテンツを文字列に変換
         let contentString = extractTextFromAny(content)
         return (contentString, errorFlag)
-    }
-    
-    // MARK: - Resources
-    
-    /// 利用可能なリソース一覧を取得
-    func listResources() async throws -> [Resource] {
-        guard isConnected else {
-            throw MCPError.invalidRequest("サーバーに接続されていません")
-        }
-        
-        print("リソース一覧を取得中...")
-        let result = try await client.listResources()
-        return result.resources
-    }
-    
-    /// リソースを読み取り
-    /// - Parameter uri: リソースのURI
-    /// - Returns: リソースの内容
-    func readResource(uri: String) async throws -> String {
-        guard isConnected else {
-            throw MCPError.invalidRequest("サーバーに接続されていません")
-        }
-        
-        print("リソース '\(uri)' を読み取り中...")
-        
-        let content = try await client.readResource(uri: uri)
-        print("リソース '\(uri)' を正常に読み取りました")
-        
-        return extractTextFromAny(content)
-    }
-    
-    // MARK: - Prompts
-    
-    /// 利用可能なプロンプト一覧を取得
-    func listPrompts() async throws -> [Prompt] {
-        guard isConnected else {
-            throw MCPError.invalidRequest("サーバーに接続されていません")
-        }
-        
-        print("プロンプト一覧を取得中...")
-        let result = try await client.listPrompts()
-        
-        print("利用可能なプロンプト: \(result.prompts.map { $0.name }.joined(separator: ", "))")
-        return result.prompts
-    }
-    
-    /// プロンプトを取得
-    /// - Parameters:
-    ///   - name: プロンプト名
-    ///   - arguments: 引数
-    /// - Returns: プロンプトの内容
-    func getPrompt(name: String, arguments: [String: Value] = [:]) async throws -> String {
-        guard isConnected else {
-            throw MCPError.invalidRequest("サーバーに接続されていません")
-        }
-        
-        print("プロンプト '\(name)' を取得中...")
-        
-        let content = try await client.getPrompt(name: name, arguments: arguments)
-        print("プロンプト '\(name)' を正常に取得しました")
-        
-        return extractTextFromAny(content)
-    }
-    
-    // MARK: - Private Methods
-    
-    /// 利用可能な機能を取得して状態を更新
-    private func loadAvailableCapabilities() async {
-        MCPStepNotificationService.shared.notifyStep("MCP サーバーの利用可能な機能を確認しています...")
-        
-        do {
-            // ツール一覧を取得
-            availableTools = try await listTools()
-            if !availableTools.isEmpty {
-                let toolNames = availableTools.map { $0.name }.joined(separator: ", ")
-                MCPStepNotificationService.shared.notifyStep("利用可能なMCPツール: \(toolNames)")
-            }
-        } catch {
-            print("ツール一覧の取得に失敗: \(error)")
-        }
-        
-        do {
-            // リソース一覧を取得
-            availableResources = try await listResources()
-            if !availableResources.isEmpty {
-                MCPStepNotificationService.shared.notifyStep("リソース機能も利用可能です")
-            }
-        } catch {
-            print("リソース一覧の取得に失敗: \(error)")
-        }
-        
-        do {
-            // プロンプト一覧を取得
-            availablePrompts = try await listPrompts()
-            if !availablePrompts.isEmpty {
-                MCPStepNotificationService.shared.notifyStep("プロンプト機能も利用可能です")
-            }
-        } catch {
-            print("プロンプト一覧の取得に失敗: \(error)")
-        }
     }
     
     // MARK: - Utility Methods

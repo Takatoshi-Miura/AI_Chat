@@ -56,8 +56,6 @@ struct WeatherMCPTool: FoundationModels.Tool {
                 "city": mcpClient.stringValue(cityName)
             ]
             
-            print("ツール '\(toolName)' を呼び出し中...")
-            
             // get_weather_overviewツールを呼び出し
             let (content, isError) = try await mcpClient.callTool(
                 name: toolName,
