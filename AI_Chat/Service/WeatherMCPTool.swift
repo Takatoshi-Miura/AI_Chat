@@ -7,6 +7,8 @@ struct WeatherMCPTool: FoundationModels.Tool {
     let name = "getWeather"
     let description = "都市の天気予報、気温、降水確率、風速、波を取得できます。"
     
+    let serverURL = URL(string: "https://mcp-weather.get-weather.workers.dev")
+    
     @Generable
     struct Arguments {
         @Guide(description: "The city to get weather information for")
@@ -32,8 +34,7 @@ struct WeatherMCPTool: FoundationModels.Tool {
         let mcpClient = MCPClientService()
         
         do {
-            // リモートMCPサーバーのエンドポイント
-            guard let endpoint = URL(string: "https://mcp-weather.get-weather.workers.dev") else {
+            guard let endpoint = serverURL else {
                 return ModelToolResult.failure("無効なエンドポイントURL")
             }
             
