@@ -54,6 +54,10 @@ struct ChatView: View {
                 .padding()
                 .animation(.easeInOut(duration: 0.3), value: viewModel.messages.count)
             }
+            .onTapGesture {
+                // チャット欄をタップしたときにキーボードを閉じる
+                isInputFocused = false
+            }
             .onChange(of: viewModel.messages.count) { _, _ in
                 if let lastMessage = viewModel.messages.last {
                     withAnimation(.easeOut(duration: 0.3)) {
