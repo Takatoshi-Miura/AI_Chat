@@ -5,6 +5,17 @@ import Combine
 @MainActor
 class StepByStepResponseService: ObservableObject {
     
+    private weak var aiService: AIService?
+    
+    init(aiService: AIService? = nil) {
+        self.aiService = aiService
+    }
+    
+    /// AIServiceインスタンスを設定
+    func setAIService(_ service: AIService) {
+        self.aiService = service
+    }
+    
     /// 段階的回答を実行
     /// - Parameters:
     ///   - userMessage: ユーザーのメッセージ
@@ -77,10 +88,13 @@ class StepByStepResponseService: ObservableObject {
         ]
     }
     
-    /// 実際のAI応答を生成（既存のAIServiceを使用）
+    /// 実際のAI応答を生成（設定されたAIServiceを使用）
     private func generateActualResponse(for message: String) async -> String {
+        guard let aiService = aiService else {
+            return "申し訳ございません。AIサービスが利用できません。"
+        }
+        
         do {
-            let aiService = AIService()
             let response = try await aiService.generateResponse(for: message)
             return response
         } catch {

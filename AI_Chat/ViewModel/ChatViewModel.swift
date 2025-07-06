@@ -8,17 +8,73 @@ class ChatViewModel: ObservableObject {
     @Published var inputText: String = ""
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
+    @Published var dynamicToolsStatus: String = "動的ツール: 未接続"
     
     private var aiService = AIService()
-    private var stepByStepService = StepByStepResponseService()
+    private var stepByStepService: StepByStepResponseService
     private var cancellables = Set<AnyCancellable>()
     
     // 段階的回答の一時的なメッセージIDを追跡
     private var temporaryMessageIds: Set<UUID> = []
     
     init() {
+        // StepByStepResponseServiceを同じAIServiceインスタンスで初期化
+        self.stepByStepService = StepByStepResponseService(aiService: aiService)
+        
         // 初期化時にウェルカムメッセージを追加
         messages.append(ChatMessage(text: LocalizedStrings.welcomeMessage, isFromUser: false))
+        
+        // 動的MCPツールの初期化を実行
+        initializeDynamicTools()
+    }
+    
+    /// 動的MCPツールを初期化
+    private func initializeDynamicTools() {
+        Task {
+            await setupDynamicMCPTools()
+        }
+    }
+    
+    /// 動的MCPツールを設定
+    private func setupDynamicMCPTools() async {
+        guard let serverURL = URL(string: "https://mcp-weather.get-weather.workers.dev") else {
+            dynamicToolsStatus = "動的ツール: URL設定エラー"
+            return
+        }
+        
+        do {
+            dynamicToolsStatus = "動的ツール: 接続中..."
+            
+            // MCPサーバーに接続して動的ツールを設定
+            try await aiService.connectAndUpdateTools(serverURL: serverURL)
+            
+            let availableTools = aiService.getAvailableDynamicTools()
+            if !availableTools.isEmpty {
+                let toolNames = availableTools.map { $0.name }.joined(separator: ", ")
+                dynamicToolsStatus = "動的ツール: 利用可能 (\(toolNames))"
+                
+                // 利用可能なツールの情報をメッセージに追加
+                let toolsMessage = "🔧 動的MCPツールが利用可能になりました:\n\(availableTools.map { "・\($0.name): \($0.description)" }.joined(separator: "\n"))"
+                messages.append(ChatMessage(text: toolsMessage, isFromUser: false))
+            } else {
+                dynamicToolsStatus = "動的ツール: ツールが見つかりませんでした"
+            }
+            
+        } catch {
+            dynamicToolsStatus = "動的ツール: 接続エラー - \(error.localizedDescription)"
+            print("動的MCPツール初期化エラー: \(error)")
+            
+            // エラーメッセージをチャットに追加
+            let errorMessage = "⚠️ 動的MCPツールの初期化に失敗しました。基本機能は利用可能です。"
+            messages.append(ChatMessage(text: errorMessage, isFromUser: false))
+        }
+    }
+    
+    /// 動的ツールの再接続を試行
+    func retryDynamicToolsConnection() {
+        Task {
+            await setupDynamicMCPTools()
+        }
     }
     
     /// メッセージを送信する

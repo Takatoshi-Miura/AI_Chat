@@ -10,7 +10,7 @@ class MCPClientService: ObservableObject {
     private let client: Client
     private var transport: HTTPClientTransport?
     @Published var isConnected = false
-    @Published var availableTools: [Tool] = []
+    @Published var availableTools: [MCP.Tool] = []
     
     // MARK: - Initialization
     init(appName: String = "AI_Chat", appVersion: String = "1.0.0") {
@@ -64,7 +64,7 @@ class MCPClientService: ObservableObject {
     // MARK: - Tools
     
     /// 利用可能なツール一覧を取得
-    private func listTools() async throws -> [Tool] {
+    private func listTools() async throws -> [MCP.Tool] {
         guard isConnected else {
             throw MCPError.invalidRequest("サーバーに接続されていません")
         }
@@ -73,10 +73,96 @@ class MCPClientService: ObservableObject {
         if !result.tools.isEmpty {
             let toolNames = result.tools.map { $0.name }.joined(separator: ", ")
             MCPStepNotificationService.shared.notifyStep("利用可能なMCPツール: \(toolNames)")
+            
+            // ツールの詳細情報をデバッグ出力
+            debugToolDetails(result.tools)
         } else {
             MCPStepNotificationService.shared.notifyStep("利用可能なMCPツールが見つかりませんでした")
         }
         return result.tools
+    }
+    
+    /// MCPツールの詳細情報をデバッグ出力
+    private func debugToolDetails(_ tools: [MCP.Tool]) {
+        for tool in tools {
+            print("=== MCP Tool Debug Info ===")
+            print("Name: \(tool.name)")
+            
+            // Toolオブジェクトの詳細を出力
+            let mirror = Mirror(reflecting: tool)
+            for (label, value) in mirror.children {
+                if let propertyName = label {
+                    print("\(propertyName): \(value)")
+                    
+                    // スキーマ情報の詳細を出力
+                    if propertyName.lowercased().contains("schema") || propertyName.lowercased().contains("input") {
+                        print("  スキーマ詳細:")
+                        let schemaMirror = Mirror(reflecting: value)
+                        for (schemaLabel, schemaValue) in schemaMirror.children {
+                            if let schemaPropertyName = schemaLabel {
+                                print("    \(schemaPropertyName): \(schemaValue)")
+                            }
+                        }
+                    }
+                }
+            }
+            print("========================")
+        }
+    }
+    
+    /// MCPツールの詳細情報を取得（強化版）
+    /// - Parameter toolName: ツール名
+    /// - Returns: ツールの詳細情報
+    func getToolDetails(_ toolName: String) -> (description: String?, inputSchema: [String: Any]?) {
+        guard let tool = availableTools.first(where: { $0.name == toolName }) else {
+            return (nil, nil)
+        }
+        
+        print("=== Tool Details Debug for \(toolName) ===")
+        
+        // Reflectionを使ってツールのプロパティを調査
+        let mirror = Mirror(reflecting: tool)
+        var description: String?
+        var inputSchema: [String: Any]?
+        
+        for (label, value) in mirror.children {
+            if let propertyName = label {
+                print("Property: \(propertyName) = \(value) (Type: \(type(of: value)))")
+                
+                switch propertyName.lowercased() {
+                case "description":
+                    description = value as? String
+                    print("  Found description: \(description ?? "nil")")
+                case "inputschema", "input_schema", "schema":
+                    print("  Found schema property: \(value)")
+                    if let schemaDict = value as? [String: Any] {
+                        inputSchema = schemaDict
+                        print("  Schema as dict: \(schemaDict)")
+                    } else {
+                        // 他の形式のスキーマ情報を試してみる
+                        print("  Schema is not [String: Any], trying other formats...")
+                        let schemaMirror = Mirror(reflecting: value)
+                        var extractedSchema: [String: Any] = [:]
+                        for (schemaLabel, schemaValue) in schemaMirror.children {
+                            if let key = schemaLabel {
+                                print("    Schema property: \(key) = \(schemaValue)")
+                                extractedSchema[key] = schemaValue
+                            }
+                        }
+                        if !extractedSchema.isEmpty {
+                            inputSchema = extractedSchema
+                        }
+                    }
+                default:
+                    break
+                }
+            }
+        }
+        
+        print("Final result - Description: \(description ?? "nil"), Schema: \(inputSchema ?? [:])")
+        print("==========================================")
+        
+        return (description, inputSchema)
     }
     
     /// 指定されたツールが利用可能かどうかを確認

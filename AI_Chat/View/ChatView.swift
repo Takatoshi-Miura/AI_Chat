@@ -8,7 +8,9 @@ struct ChatView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // メッセージリスト
+                // 動的ツールステータス表示
+                dynamicToolsStatusView
+                
                 messageListView
                 
                 Divider()
@@ -19,20 +21,18 @@ struct ChatView: View {
             .navigationTitle(LocalizedStrings.aiChat)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
                     clearButton
+                    retryConnectionButton
                 }
             }
         }
-        .alert("エラー", isPresented: .constant(viewModel.errorMessage != nil)) {
+        .alert("エラー", isPresented: Binding<Bool>(
+            get: { viewModel.errorMessage != nil },
+            set: { _ in viewModel.clearError() }
+        )) {
             Button("OK") {
                 viewModel.clearError()
-            }
-            Button("再試行") {
-                viewModel.clearError()
-                if !viewModel.inputText.isEmpty {
-                    viewModel.sendMessage()
-                }
             }
         } message: {
             Text(viewModel.errorMessage ?? "")
@@ -40,6 +40,33 @@ struct ChatView: View {
     }
     
     // MARK: - View Components
+    
+    private var dynamicToolsStatusView: some View {
+        HStack {
+            Image(systemName: viewModel.dynamicToolsStatus.contains("利用可能") ? "checkmark.circle.fill" : 
+                             viewModel.dynamicToolsStatus.contains("接続中") ? "arrow.clockwise" : "exclamationmark.triangle.fill")
+                .foregroundColor(viewModel.dynamicToolsStatus.contains("利用可能") ? .green : 
+                               viewModel.dynamicToolsStatus.contains("接続中") ? .blue : .orange)
+            
+            Text(viewModel.dynamicToolsStatus)
+                .font(.caption)
+                .foregroundColor(.secondary)
+            
+            Spacer()
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 4)
+        .background(Color.gray.opacity(0.1))
+    }
+    
+    private var retryConnectionButton: some View {
+        Button(action: {
+            viewModel.retryDynamicToolsConnection()
+        }) {
+            Image(systemName: "arrow.clockwise")
+        }
+        .disabled(viewModel.dynamicToolsStatus.contains("接続中"))
+    }
     
     private var messageListView: some View {
         ScrollViewReader { proxy in
