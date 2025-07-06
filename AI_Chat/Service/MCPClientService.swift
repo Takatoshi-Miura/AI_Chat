@@ -182,25 +182,60 @@ class MCPClientService: ObservableObject {
             throw MCPError.invalidRequest("サーバーに接続されていません")
         }
         
+        print("=== MCP Tool Call Debug ===")
+        print("Tool name: \(toolName)")
+        print("Arguments count: \(arguments.count)")
+        for (key, value) in arguments {
+            print("  \(key): \(value)")
+        }
+        print("==========================")
+        
         // 引数の詳細を表示
         let argumentsText = arguments.isEmpty ? "なし" : arguments.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
         MCPStepNotificationService.shared.notifyStep("MCPツール '\(toolName)' を実行中... (引数: \(argumentsText))")
         
-        let (content, isError) = try await client.callTool(
-            name: toolName,
-            arguments: arguments
-        )
-        
-        let errorFlag = isError ?? false
-        if errorFlag {
-            MCPStepNotificationService.shared.notifyStep("❌ MCPツール '\(toolName)' の実行でエラーが発生しました")
-        } else {
-            MCPStepNotificationService.shared.notifyStep("✅ MCPツール '\(toolName)' の実行が完了しました")
+        do {
+            let (content, isError) = try await client.callTool(
+                name: toolName,
+                arguments: arguments
+            )
+            
+            let errorFlag = isError ?? false
+            
+            print("=== MCP Tool Response ===")
+            print("Tool: \(toolName)")
+            print("Error flag: \(errorFlag)")
+            print("Content type: \(type(of: content))")
+            print("Raw content: \(content)")
+            print("========================")
+            
+            if errorFlag {
+                MCPStepNotificationService.shared.notifyStep("❌ MCPツール '\(toolName)' の実行でエラーが発生しました")
+                let contentString = extractTextFromAny(content)
+                print("Error content: \(contentString)")
+                return (contentString, errorFlag)
+            } else {
+                MCPStepNotificationService.shared.notifyStep("✅ MCPツール '\(toolName)' の実行が完了しました")
+                let contentString = extractTextFromAny(content)
+                print("Success content: \(contentString)")
+                return (contentString, errorFlag)
+            }
+            
+        } catch {
+            print("=== MCP Tool Call Exception ===")
+            print("Tool: \(toolName)")
+            print("Error: \(error)")
+            print("Error description: \(error.localizedDescription)")
+            if let nsError = error as NSError? {
+                print("Error domain: \(nsError.domain)")
+                print("Error code: \(nsError.code)")
+                print("Error userInfo: \(nsError.userInfo)")
+            }
+            print("==============================")
+            
+            MCPStepNotificationService.shared.notifyStep("❌ MCPツール '\(toolName)' の呼び出しで例外が発生しました: \(error.localizedDescription)")
+            throw error
         }
-        
-        // コンテンツを文字列に変換
-        let contentString = extractTextFromAny(content)
-        return (contentString, errorFlag)
     }
     
     // MARK: - Utility Methods
@@ -294,8 +329,18 @@ class MCPClientService: ObservableObject {
     
     /// 辞書をValue辞書に変換する便利メソッド
     func convertArguments(_ args: [String: Any]) -> [String: Value] {
-        return args.compactMapValues { value in
-            return convertToValue(value)
+        print("=== Converting Arguments to MCP Values ===")
+        print("Input arguments: \(args)")
+        
+        let result = args.compactMapValues { value in
+            let convertedValue = convertToValue(value)
+            print("Converting \(value) (type: \(type(of: value))) -> \(convertedValue?.description ?? "nil")")
+            return convertedValue
         }
+        
+        print("Final MCP Values: \(result)")
+        print("=========================================")
+        
+        return result
     }
 }

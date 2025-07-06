@@ -19,7 +19,9 @@ class AIService {
     init() {
         self.dynamicToolService = DynamicMCPToolService(mcpService: mcpClient)
         
+        // 初期状態では空のツールリストで開始
         session = LanguageModelSession(
+            tools: [],
             instructions: systemPrompt
         )
     }
@@ -41,8 +43,7 @@ class AIService {
     
     /// セッションを動的ツールで更新
     private func updateSessionWithDynamicTools() {
-        var allTools: [any FoundationModels.Tool] = []
-        allTools.append(contentsOf: dynamicTools)
+        let allTools: [any FoundationModels.Tool] = dynamicTools
         
         session = LanguageModelSession(
             tools: allTools,
@@ -52,10 +53,12 @@ class AIService {
     
     /// 利用可能な全ツールの説明を取得
     private func getAllAvailableToolsDescription() -> String {
-        var descriptions = [""]
+        if dynamicTools.isEmpty {
+            return "利用可能なツールはありません"
+        }
         
-        for tool in dynamicTools {
-            descriptions.append("- \(tool.name)：\(tool.description)")
+        let descriptions = dynamicTools.map { tool in
+            "- \(tool.name)：\(tool.description)"
         }
         
         return descriptions.joined(separator: "\n")
