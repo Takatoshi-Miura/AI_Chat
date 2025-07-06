@@ -40,8 +40,6 @@ struct DynamicMCPTool: FoundationModels.Tool {
     @MainActor
     private func performMCPToolCall(input: String) async -> String {
         do {
-            MCPStepNotificationService.shared.notifyStep("MCPツール '\(name)' を準備中...")
-            
             // 引数を準備
             let mcpArguments = try prepareArguments(input: input)
             

@@ -43,12 +43,12 @@ struct ChatView: View {
     
     private var dynamicToolsStatusView: some View {
         HStack {
-            Image(systemName: viewModel.dynamicToolsStatus.contains("利用可能") ? "checkmark.circle.fill" : 
-                             viewModel.dynamicToolsStatus.contains("接続中") ? "arrow.clockwise" : "exclamationmark.triangle.fill")
-                .foregroundColor(viewModel.dynamicToolsStatus.contains("利用可能") ? .green : 
-                               viewModel.dynamicToolsStatus.contains("接続中") ? .blue : .orange)
+            Image(systemName: viewModel.mcpToolsStatus.contains("利用可能") ? "checkmark.circle.fill" : 
+                             viewModel.mcpToolsStatus.contains("接続中") ? "arrow.clockwise" : "exclamationmark.triangle.fill")
+                .foregroundColor(viewModel.mcpToolsStatus.contains("利用可能") ? .green : 
+                               viewModel.mcpToolsStatus.contains("接続中") ? .blue : .orange)
             
-            Text(viewModel.dynamicToolsStatus)
+            Text(viewModel.mcpToolsStatus)
                 .font(.caption)
                 .foregroundColor(.secondary)
             
@@ -65,7 +65,7 @@ struct ChatView: View {
         }) {
             Image(systemName: "arrow.clockwise")
         }
-        .disabled(viewModel.dynamicToolsStatus.contains("接続中"))
+        .disabled(viewModel.mcpToolsStatus.contains("接続中"))
     }
     
     private var messageListView: some View {

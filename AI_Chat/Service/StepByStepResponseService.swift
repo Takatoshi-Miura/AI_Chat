@@ -36,56 +36,13 @@ class StepByStepResponseService: ObservableObject {
             onStepUpdate(mcpMessage)
         }
         
-        // 質問内容に応じて動的にステップを決定（処理時間のみ使用）
-        let steps = determineSteps(for: userMessage)
-        
-        // 各ステップの処理時間をシミュレート（メッセージ表示なし）
-        for step in steps {
-            // ステップの実行時間をシミュレート
-            try? await Task.sleep(nanoseconds: UInt64(step.duration * 1_000_000_000))
-        }
-        
-        // 実際のAI応答を生成
+        // AI応答を生成
         let finalResponse = await generateActualResponse(for: userMessage)
         
         // MCPステップ通知のコールバックをクリア
         MCPStepNotificationService.shared.clearStepUpdateCallback()
         
         onFinalResponse(finalResponse)
-    }
-    
-    /// 質問内容に応じてステップを決定
-    private func determineSteps(for message: String) -> [ResponseStep] {
-        let lowercaseMessage = message.lowercased()
-        
-        // 天気関連の質問
-        if lowercaseMessage.contains("天気") || lowercaseMessage.contains("気温") || 
-           lowercaseMessage.contains("降水") || lowercaseMessage.contains("雨") {
-            return [
-                ResponseStep(message: "", duration: 0.5) // MCPサーバー処理時間のみ
-            ]
-        }
-        
-        // 計算や数学関連の質問
-        if lowercaseMessage.contains("計算") || lowercaseMessage.contains("数") || 
-           lowercaseMessage.contains("何") || lowercaseMessage.contains("いくつ") {
-            return [
-                ResponseStep(message: "", duration: 1.0)
-            ]
-        }
-        
-        // 説明や解説を求める質問
-        if lowercaseMessage.contains("説明") || lowercaseMessage.contains("教え") || 
-           lowercaseMessage.contains("とは") || lowercaseMessage.contains("について") {
-            return [
-                ResponseStep(message: "", duration: 1.5)
-            ]
-        }
-        
-        // 一般的な質問のデフォルトステップ
-        return [
-            ResponseStep(message: "", duration: 1.0)
-        ]
     }
     
     /// 実際のAI応答を生成（設定されたAIServiceを使用）
@@ -101,10 +58,4 @@ class StepByStepResponseService: ObservableObject {
             return "申し訳ございません。回答の生成中にエラーが発生しました。もう一度お試しください。"
         }
     }
-}
-
-/// 回答ステップの定義
-struct ResponseStep {
-    let message: String
-    let duration: Double
 } 

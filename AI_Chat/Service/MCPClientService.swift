@@ -54,8 +54,6 @@ class MCPClientService: ObservableObject {
         await client.disconnect()
         transport = nil
         isConnected = false
-        
-        // 状態をリセット
         availableTools = []
         
         MCPStepNotificationService.shared.notifyStep("MCPサーバーから切断しました")
@@ -70,47 +68,17 @@ class MCPClientService: ObservableObject {
         }
         
         let result = try await client.listTools()
-        if !result.tools.isEmpty {
-            let toolNames = result.tools.map { $0.name }.joined(separator: ", ")
-            MCPStepNotificationService.shared.notifyStep("利用可能なMCPツール: \(toolNames)")
-            
-            // ツールの詳細情報をデバッグ出力
-            debugToolDetails(result.tools)
-        } else {
+        if result.tools.isEmpty {
             MCPStepNotificationService.shared.notifyStep("利用可能なMCPツールが見つかりませんでした")
+            return result.tools
         }
+        
+        let toolNames = result.tools.map { $0.name }.joined(separator: ", ")
+        MCPStepNotificationService.shared.notifyStep("利用可能なMCPツール: \(toolNames)")
         return result.tools
     }
     
-    /// MCPツールの詳細情報をデバッグ出力
-    private func debugToolDetails(_ tools: [MCP.Tool]) {
-        for tool in tools {
-            print("=== MCP Tool Debug Info ===")
-            print("Name: \(tool.name)")
-            
-            // Toolオブジェクトの詳細を出力
-            let mirror = Mirror(reflecting: tool)
-            for (label, value) in mirror.children {
-                if let propertyName = label {
-                    print("\(propertyName): \(value)")
-                    
-                    // スキーマ情報の詳細を出力
-                    if propertyName.lowercased().contains("schema") || propertyName.lowercased().contains("input") {
-                        print("  スキーマ詳細:")
-                        let schemaMirror = Mirror(reflecting: value)
-                        for (schemaLabel, schemaValue) in schemaMirror.children {
-                            if let schemaPropertyName = schemaLabel {
-                                print("    \(schemaPropertyName): \(schemaValue)")
-                            }
-                        }
-                    }
-                }
-            }
-            print("========================")
-        }
-    }
-    
-    /// MCPツールの詳細情報を取得（強化版）
+    /// MCPツールの詳細情報を取得
     /// - Parameter toolName: ツール名
     /// - Returns: ツールの詳細情報
     func getToolDetails(_ toolName: String) -> (description: String?, inputSchema: [String: Any]?) {
@@ -182,14 +150,6 @@ class MCPClientService: ObservableObject {
             throw MCPError.invalidRequest("サーバーに接続されていません")
         }
         
-        print("=== MCP Tool Call Debug ===")
-        print("Tool name: \(toolName)")
-        print("Arguments count: \(arguments.count)")
-        for (key, value) in arguments {
-            print("  \(key): \(value)")
-        }
-        print("==========================")
-        
         // 引数の詳細を表示
         let argumentsText = arguments.isEmpty ? "なし" : arguments.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
         MCPStepNotificationService.shared.notifyStep("MCPツール '\(toolName)' を実行中... (引数: \(argumentsText))")
@@ -201,38 +161,17 @@ class MCPClientService: ObservableObject {
             )
             
             let errorFlag = isError ?? false
-            
-            print("=== MCP Tool Response ===")
-            print("Tool: \(toolName)")
-            print("Error flag: \(errorFlag)")
-            print("Content type: \(type(of: content))")
-            print("Raw content: \(content)")
-            print("========================")
-            
             if errorFlag {
                 MCPStepNotificationService.shared.notifyStep("❌ MCPツール '\(toolName)' の実行でエラーが発生しました")
                 let contentString = extractTextFromAny(content)
-                print("Error content: \(contentString)")
                 return (contentString, errorFlag)
             } else {
                 MCPStepNotificationService.shared.notifyStep("✅ MCPツール '\(toolName)' の実行が完了しました")
                 let contentString = extractTextFromAny(content)
-                print("Success content: \(contentString)")
                 return (contentString, errorFlag)
             }
             
         } catch {
-            print("=== MCP Tool Call Exception ===")
-            print("Tool: \(toolName)")
-            print("Error: \(error)")
-            print("Error description: \(error.localizedDescription)")
-            if let nsError = error as NSError? {
-                print("Error domain: \(nsError.domain)")
-                print("Error code: \(nsError.code)")
-                print("Error userInfo: \(nsError.userInfo)")
-            }
-            print("==============================")
-            
             MCPStepNotificationService.shared.notifyStep("❌ MCPツール '\(toolName)' の呼び出しで例外が発生しました: \(error.localizedDescription)")
             throw error
         }
