@@ -13,7 +13,7 @@ class AIService {
     private var dynamicTools: [any FoundationModels.Tool] = []
     let systemPrompt = """
     あなたは親切で知識豊富なAIアシスタントです。日本語で丁寧に回答してください。
-    外部情報が必要な場合は、用途に合ったFoundationModels.Toolを使用して回答してください。
+    外部情報が必要な場合は、用途に合ったツールを使用して回答してください。
     """
     
     init() {

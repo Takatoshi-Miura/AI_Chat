@@ -90,16 +90,6 @@ class DynamicMCPToolService {
                         }
                     }
                 }
-                
-                // 使用例を追加（特に天気ツールの場合）
-                if toolName.contains("weather") || toolName.contains("天気") {
-                    if let cityField = required.first,
-                       let cityInfo = properties[cityField] as? [String: Any],
-                       let cityEnum = cityInfo["enum"] as? [String] {
-                        let exampleCities = Array(cityEnum.prefix(5))
-                        description += "\n\n使用例: 「\(exampleCities.randomElement() ?? "東京")の天気を教えて」"
-                    }
-                }
             }
         }
         

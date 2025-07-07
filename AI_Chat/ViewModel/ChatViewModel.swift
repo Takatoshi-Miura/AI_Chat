@@ -8,11 +8,13 @@ class ChatViewModel: ObservableObject {
     @Published var inputText: String = ""
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
-    @Published var mcpToolsStatus: String = "動的ツール: 未接続"
+    @Published var mcpToolsStatus: String = "MCPツール: 未接続"
     
     private var aiService = AIService()
     private var stepByStepService: StepByStepResponseService
     private var cancellables = Set<AnyCancellable>()
+    
+    private let mcpSerVerURL = URL(string: "https://mcp-weather.get-weather.workers.dev")
     
     init() {
         // StepByStepResponseServiceを同じAIServiceインスタンスで初期化
@@ -32,9 +34,9 @@ class ChatViewModel: ObservableObject {
         }
     }
     
-    /// 動的MCPツールを設定
+    /// MCPツールを設定
     private func setupDynamicMCPTools() async {
-        guard let serverURL = URL(string: "https://mcp-weather.get-weather.workers.dev") else {
+        guard let serverURL = mcpSerVerURL else {
             mcpToolsStatus = "MCPツール: URL設定エラー"
             return
         }
