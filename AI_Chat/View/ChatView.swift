@@ -4,12 +4,13 @@ import Combine
 struct ChatView: View {
     @StateObject private var viewModel = ChatViewModel()
     @FocusState private var isInputFocused: Bool
+    @State private var showServerDetails = false
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // 動的ツールステータス表示
-                dynamicToolsStatusView
+                // 複数サーバー対応ツールステータス表示
+                mcpToolsStatusView
                 
                 messageListView
                 
@@ -23,7 +24,6 @@ struct ChatView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     clearButton
-                    retryConnectionButton
                 }
             }
         }
@@ -41,31 +41,150 @@ struct ChatView: View {
     
     // MARK: - View Components
     
-    private var dynamicToolsStatusView: some View {
-        HStack {
-            Image(systemName: viewModel.mcpToolsStatus.contains("利用可能") ? "checkmark.circle.fill" : 
-                             viewModel.mcpToolsStatus.contains("接続中") ? "arrow.clockwise" : "exclamationmark.triangle.fill")
-                .foregroundColor(viewModel.mcpToolsStatus.contains("利用可能") ? .green : 
-                               viewModel.mcpToolsStatus.contains("接続中") ? .blue : .orange)
+    private var mcpToolsStatusView: some View {
+        VStack(spacing: 0) {
+            HStack {
+                statusIndicator
+                
+                Text(viewModel.mcpToolsStatus)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                serverManagementButtons
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
             
-            Text(viewModel.mcpToolsStatus)
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            Spacer()
+            // サーバー詳細表示
+            if showServerDetails {
+                serverDetailsView
+            }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 4)
         .background(Color.gray.opacity(0.1))
     }
     
-    private var retryConnectionButton: some View {
-        Button(action: {
-            viewModel.retryDynamicToolsConnection()
-        }) {
-            Image(systemName: "arrow.clockwise")
+    private var statusIndicator: some View {
+        Image(systemName: viewModel.mcpToolsStatus.contains("利用可能") || viewModel.mcpToolsStatus.contains("接続済み") ? "checkmark.circle.fill" : 
+                         viewModel.mcpToolsStatus.contains("接続中") ? "arrow.clockwise" : "exclamationmark.triangle.fill")
+            .foregroundColor(viewModel.mcpToolsStatus.contains("利用可能") || viewModel.mcpToolsStatus.contains("接続済み") ? .green : 
+                           viewModel.mcpToolsStatus.contains("接続中") ? .blue : .orange)
+            .imageScale(.small)
+    }
+    
+    private var serverManagementButtons: some View {
+        HStack(spacing: 8) {
+            Button("全再接続") {
+                Task {
+                    await viewModel.retryDynamicToolsConnection()
+                }
+            }
+            .font(.caption2)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.blue.opacity(0.1))
+            .foregroundColor(.blue)
+            .cornerRadius(4)
+            .disabled(viewModel.mcpToolsStatus.contains("接続中"))
+            
+            Button(action: {
+                showServerDetails.toggle()
+            }) {
+                Image(systemName: showServerDetails ? "chevron.up" : "chevron.down")
+                    .font(.caption)
+            }
+            .foregroundColor(.blue)
+            .frame(minWidth: 30)
+            .padding(.horizontal, 4)
         }
-        .disabled(viewModel.mcpToolsStatus.contains("接続中"))
+    }
+    
+    private var serverDetailsView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("サーバー接続状況")
+                .font(.caption.weight(.semibold))
+                .foregroundColor(.secondary)
+                .padding(.horizontal)
+            
+            ForEach(viewModel.getServerConnectionStatus(), id: \.url) { server in
+                HStack {
+                    Circle()
+                        .fill(server.isConnected ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                    
+                    Text(server.serverName)
+                        .font(.caption)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    if !server.isConnected {
+                        Button("再接続") {
+                            Task {
+                                await viewModel.retryServerConnection(server.url)
+                            }
+                        }
+                        .font(.caption2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.blue.opacity(0.1))
+                        .foregroundColor(.blue)
+                        .cornerRadius(4)
+                    } else {
+                        Button("切断") {
+                            Task {
+                                await viewModel.disconnectFromServer(server.url)
+                            }
+                        }
+                        .font(.caption2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.red.opacity(0.1))
+                        .foregroundColor(.red)
+                        .cornerRadius(4)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 4)
+            }
+            
+            // 全サーバー管理ボタン
+            HStack {
+                Button("全て切断") {
+                    Task {
+                        await viewModel.disconnectFromAllServers()
+                    }
+                }
+                .font(.caption)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.red.opacity(0.1))
+                .foregroundColor(.red)
+                .cornerRadius(6)
+                
+                Spacer()
+                
+                Text("\(viewModel.getConnectionDetails().connected.count)/\(viewModel.getConnectionDetails().totalServers) サーバー接続済み")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal)
+            .padding(.top, 4)
+        }
+        .padding(.vertical, 8)
+        .background(Color(.systemGray6))
+    }
+    
+    private var serverDetailsButton: some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                showServerDetails.toggle()
+            }
+        }) {
+            Image(systemName: "server.rack")
+        }
+        .foregroundColor(.blue)
     }
     
     private var messageListView: some View {

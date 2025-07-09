@@ -8,17 +8,18 @@ class AIService {
     var session: LanguageModelSession
     var errorMessage: String?
     
-    private let mcpClient = MCPClientService()
-    private let dynamicToolService: DynamicMCPToolService
-    private var dynamicTools: [any FoundationModels.Tool] = []
+    // 複数のMCPクライアントを管理
+    private var mcpClients: [String: MCPClientService] = [:]
+    private var dynamicToolServices: [String: DynamicMCPToolService] = [:]
+    private var allDynamicTools: [any FoundationModels.Tool] = []
+    private var serverTools: [String: [any FoundationModels.Tool]] = [:]
+    
     let systemPrompt = """
     あなたは親切で知識豊富なAIアシスタントです。日本語で丁寧に回答してください。
     外部情報が必要な場合は、用途に合ったツールを使用して回答してください。
     """
     
     init() {
-        self.dynamicToolService = DynamicMCPToolService(mcpService: mcpClient)
-        
         // 初期状態では空のツールリストで開始
         session = LanguageModelSession(
             tools: [],
@@ -26,38 +27,110 @@ class AIService {
         )
     }
     
-    /// MCPサーバーに接続して動的ツールを作成・追加
+    /// 指定したMCPサーバーに接続して動的ツールを作成・追加
     /// - Parameter serverURL: MCPサーバーのURL
     func connectAndUpdateTools(serverURL: URL) async throws {
-        // MCPサーバーに接続
+        let serverKey = generateServerKey(from: serverURL)
+        
+        // 既存の接続があれば切断してから再接続
+        if let existingClient = mcpClients[serverKey] {
+            await existingClient.disconnect()
+        }
+        
+        // 新しいクライアントを作成
+        let mcpClient = MCPClientService()
+        mcpClients[serverKey] = mcpClient
+        
+        // MCPサーバーに接続＆MCPツール取得
         try await mcpClient.connect(to: serverURL)
         
-        // 動的ツールを作成
-        dynamicTools = dynamicToolService.createAllDynamicTools()
+        // MCPツールをFoundationModels.Toolに変換
+        let toolService = DynamicMCPToolService(mcpService: mcpClient)
+        dynamicToolServices[serverKey] = toolService
+        let newServerTools = toolService.createAllDynamicTools()
+        serverTools[serverKey] = newServerTools
         
-        // セッションを動的ツールで更新
-        updateSessionWithDynamicTools()
+        // 全ツールを再構築
+        rebuildAllTools()
         
-        MCPStepNotificationService.shared.notifyStep("✅ MCPツールが利用可能になりました: \(dynamicTools.map { $0.name }.joined(separator: ", "))")
+        let serverName = extractServerName(from: serverURL)
+        MCPStepNotificationService.shared.notifyStep("✅ \(serverName)のMCPツールが利用可能になりました: \(newServerTools.map { $0.name }.joined(separator: ", "))")
     }
     
-    /// セッションを動的ツールで更新
-    private func updateSessionWithDynamicTools() {
-        let allTools: [any FoundationModels.Tool] = dynamicTools
+    /// 全てのサーバーから切断
+    func disconnectAllServers() async {
+        for (serverKey, client) in mcpClients {
+            await client.disconnect()
+            MCPStepNotificationService.shared.notifyStep("MCPサーバー \(serverKey) から切断しました")
+        }
         
+        mcpClients.removeAll()
+        dynamicToolServices.removeAll()
+        serverTools.removeAll()
+        allDynamicTools.removeAll()
+        
+        // セッションを空のツールで更新
+        updateSessionWithAllTools()
+    }
+    
+    /// 特定のサーバーから切断
+    /// - Parameter serverURL: 切断するサーバーのURL
+    func disconnectFromServer(_ serverURL: URL) async {
+        let serverKey = generateServerKey(from: serverURL)
+        
+        if let client = mcpClients[serverKey] {
+            await client.disconnect()
+            mcpClients.removeValue(forKey: serverKey)
+            dynamicToolServices.removeValue(forKey: serverKey)
+            serverTools.removeValue(forKey: serverKey)
+            
+            // 全ツールを再構築
+            rebuildAllTools()
+            
+            let serverName = extractServerName(from: serverURL)
+            MCPStepNotificationService.shared.notifyStep("\(serverName) から切断しました")
+        }
+    }
+    
+    /// サーバーごとのツールから全ツールリストを再構築
+    private func rebuildAllTools() {
+        allDynamicTools.removeAll()
+        
+        // 各サーバーのツールを統合
+        for (_, tools) in serverTools {
+            allDynamicTools.append(contentsOf: tools)
+        }
+        
+        // セッションを更新
+        updateSessionWithAllTools()
+    }
+    
+    /// セッションを全ツールで更新
+    private func updateSessionWithAllTools() {
         session = LanguageModelSession(
-            tools: allTools,
+            tools: allDynamicTools,
             instructions: systemPrompt
         )
     }
     
+    /// URLからサーバーキーを生成
+    private func generateServerKey(from url: URL) -> String {
+        return url.host ?? url.absoluteString
+    }
+    
+    /// URLからサーバー名を抽出
+    private func extractServerName(from url: URL) -> String {
+        let host = url.host ?? "不明なサーバー"
+        return host
+    }
+    
     /// 利用可能な全ツールの説明を取得
     private func getAllAvailableToolsDescription() -> String {
-        if dynamicTools.isEmpty {
+        if allDynamicTools.isEmpty {
             return "利用可能なツールはありません"
         }
         
-        let descriptions = dynamicTools.map { tool in
+        let descriptions = allDynamicTools.map { tool in
             "- \(tool.name)：\(tool.description)"
         }
         
@@ -66,7 +139,22 @@ class AIService {
     
     /// 利用可能な動的ツールの一覧を取得
     func getAvailableDynamicTools() -> [(name: String, description: String)] {
-        return dynamicTools.map { (name: $0.name, description: $0.description) }
+        return allDynamicTools.map { (name: $0.name, description: $0.description) }
+    }
+    
+    /// 接続中のサーバー情報を取得
+    func getConnectedServers() -> [String: Bool] {
+        var serverStatus: [String: Bool] = [:]
+        for (serverKey, client) in mcpClients {
+            serverStatus[serverKey] = client.isConnected
+        }
+        return serverStatus
+    }
+    
+    /// 特定のサーバーの接続状況を確認
+    func isServerConnected(_ serverURL: URL) -> Bool {
+        let serverKey = generateServerKey(from: serverURL)
+        return mcpClients[serverKey]?.isConnected ?? false
     }
     
     /// エラーメッセージをクリア
@@ -110,7 +198,6 @@ class AIService {
             return dialogMessage
         }
     }
-
 }
 
 /// AIサービスのエラー定義
