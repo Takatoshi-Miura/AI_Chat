@@ -7,7 +7,6 @@ class ChatViewModel: ObservableObject {
     @Published var messages: [ChatMessage] = []
     @Published var inputText: String = ""
     @Published var isLoading: Bool = false
-    @Published var errorMessage: String?
     @Published var mcpToolsStatus: String = "MCPツール: 未接続"
     
     private var aiService = AIService()
@@ -153,6 +152,12 @@ class ChatViewModel: ObservableObject {
         messages.append(ChatMessage(text: errorMessage, isFromUser: false))
     }
     
+    /// 初期化エラーをチャットに追加
+    func addInitializationError(_ errorMessage: String) {
+        let errorChatMessage = ChatMessage(text: "⚠️ 初期化エラー\n\n\(errorMessage)", isFromUser: false)
+        messages.append(errorChatMessage)
+    }
+
     /// URLからサーバー名を抽出
     private func extractServerName(from url: URL) -> String {
         let host = url.host ?? "不明なサーバー"
@@ -185,7 +190,6 @@ class ChatViewModel: ObservableObject {
     /// 段階的AI応答を生成する
     private func generateStepByStepAIResponse(for message: String) async {
         isLoading = true
-        errorMessage = nil
         
         // 段階的回答サービスを使用
         await stepByStepService.generateStepByStepResponse(
@@ -204,7 +208,7 @@ class ChatViewModel: ObservableObject {
         
         isLoading = false
     }
-    
+ 
     /// 段階的回答を完了し、最終回答を追加
     private func completeStepByStepResponse(with finalResponse: String) {
         let finalMessage = ChatMessage(
@@ -213,21 +217,17 @@ class ChatViewModel: ObservableObject {
         )
         messages.append(finalMessage)
         
-        // AIServiceでエラーが発生した場合はエラーメッセージを取得
+        // AIServiceでエラーが発生した場合はエラーメッセージをチャットに追加
         if let aiServiceError = aiService.errorMessage {
-            errorMessage = aiServiceError
+            let errorChatMessage = ChatMessage(text: "⚠️ \(aiServiceError)", isFromUser: false)
+            messages.append(errorChatMessage)
+            aiService.clearError()
         }
     }
     
     /// チャット履歴をクリア
     func clearMessages() {
         messages = [ChatMessage(text: LocalizedStrings.welcomeMessage, isFromUser: false)]
-    }
-    
-    /// エラーメッセージをクリア
-    func clearError() {
-        errorMessage = nil
-        aiService.clearError()
     }
     
     // MARK: - Server Management

@@ -7,28 +7,13 @@ struct ContentView: View {
     var body: some View {
         Group {
             if initializationManager.isInitialized {
-                ChatView()
+                ChatView(initializationError: initializationManager.errorMessage)
             } else {
                 LoadingView()
             }
         }
         .task {
             await initializationManager.initialize()
-        }
-        .alert("Apple Intelligence 初期化エラー", isPresented: .constant(initializationManager.errorMessage != nil)) {
-            Button("OK") {
-                initializationManager.clearError()
-            }
-            Button("再試行") {
-                initializationManager.clearError()
-                Task {
-                    await initializationManager.initialize()
-                }
-            }
-        } message: {
-            if let errorMessage = initializationManager.errorMessage {
-                Text(errorMessage)
-            }
         }
     }
 }

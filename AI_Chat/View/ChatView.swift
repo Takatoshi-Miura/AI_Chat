@@ -6,6 +6,12 @@ struct ChatView: View {
     @FocusState private var isInputFocused: Bool
     @State private var showServerDetails = false
     
+    let initializationError: String?
+    
+    init(initializationError: String? = nil) {
+        self.initializationError = initializationError
+    }
+    
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
@@ -27,15 +33,10 @@ struct ChatView: View {
                 }
             }
         }
-        .alert("エラー", isPresented: Binding<Bool>(
-            get: { viewModel.errorMessage != nil },
-            set: { _ in viewModel.clearError() }
-        )) {
-            Button("OK") {
-                viewModel.clearError()
+        .onAppear {
+            if let errorMessage = initializationError {
+                viewModel.addInitializationError(errorMessage)
             }
-        } message: {
-            Text(viewModel.errorMessage ?? "")
         }
     }
     

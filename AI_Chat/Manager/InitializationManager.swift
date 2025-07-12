@@ -31,48 +31,32 @@ class InitializationManager: ObservableObject {
                 let testSession = LanguageModelSession(instructions: "Test")
                 _ = try await testSession.respond(to: "Hello")
             } catch {
-                // エラーメッセージを構築してダイアログ表示用に設定
-                var dialogMessage = "Apple Intelligence初期化エラー\n\n"
+                // エラーメッセージをチャット表示用に構築
+                var chatMessage = "Apple Intelligence の初期化に失敗しました。\n\n"
                 
                 if let nsError = error as NSError? {
-                    if let failureReason = nsError.localizedFailureReason {
-                        print("   Failure Reason: \(failureReason)")
-                    }
-                    
                     // 具体的なエラー原因の特定と解決策
                     if nsError.domain.contains("UnifiedAssetFramework") || nsError.code == 5000 {
-                        dialogMessage += "モデルアセットが利用できません。\n\n"
-                        dialogMessage += "解決策:\n"
-                        dialogMessage += "1. 設定 > Apple Intelligence & Siri を開く\n"
-                        dialogMessage += "2. Apple Intelligence がオンになっているか確認\n"
-                        dialogMessage += "3. モデルのダウンロードが完了しているか確認\n"
-                        dialogMessage += "4. デバイスが対応機種か確認 (iPhone 15 Pro以上)\n"
-                        dialogMessage += "5. デバイスを再起動してみる\n\n"
+                        chatMessage += "モデルアセットが利用できません。\n"
+                        chatMessage += "設定 > Apple Intelligence & Siri でモデルのダウンロードを確認してください。"
                     } else if nsError.domain.contains("ModelInference") {
-                        dialogMessage += "Apple Intelligence サービスが一時的に利用できません。\n\n"
-                        dialogMessage += "しばらく時間をおいてから再度お試しください。\n\n"
+                        chatMessage += "Apple Intelligence サービスが一時的に利用できません。\n"
+                        chatMessage += "しばらく時間をおいてから再度お試しください。"
                     } else {
-                        dialogMessage += "予期しないエラーが発生しました。\n\n"
+                        chatMessage += "予期しないエラーが発生しました。\n"
+                        chatMessage += "エラー: \(nsError.localizedDescription)"
                     }
-                    
-                    // 詳細なエラー情報を追加
-                    dialogMessage += "詳細情報:\n"
-                    dialogMessage += "Domain: \(nsError.domain)\n"
-                    dialogMessage += "Code: \(nsError.code)\n"
-                    dialogMessage += "Description: \(nsError.localizedDescription)"
-                    
                 } else {
-                    dialogMessage += "エラー: \(error.localizedDescription)"
+                    chatMessage += "エラー: \(error.localizedDescription)"
                 }
                 
-                dialogMessage += "\n\nアプリは開発モードで動作します。"
+                chatMessage += "\n\nアプリは基本機能で動作します。"
                 
-                // エラーメッセージを設定（ダイアログ表示用）
-                self.errorMessage = dialogMessage
+                // エラーメッセージを設定（チャット表示用）
+                self.errorMessage = chatMessage
             }
         } else {
-            print("Apple Intelligence: Not available on this OS version")
-            print("Requires iOS 18.1+ or macOS 15.1+")
+            errorMessage = "Apple Intelligence は iOS 18.1 以上で利用可能です。\n\nアプリは基本機能で動作します。"
         }
     }
 } 
