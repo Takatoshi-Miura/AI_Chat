@@ -2,7 +2,9 @@ import SwiftUI
 import Combine
 
 struct ChatView: View {
-    @StateObject private var viewModel = ChatViewModel()
+    @StateObject private var viewModel: ChatViewModel
+    @StateObject private var mcpConnectionViewModel: MCPConnectionViewModel
+    @StateObject private var authViewModel: AuthenticationViewModel
     @FocusState private var isInputFocused: Bool
     @State private var showServerDetails = false
     
@@ -10,13 +12,22 @@ struct ChatView: View {
     
     init(initializationError: String? = nil) {
         self.initializationError = initializationError
+        
+        let factory = ViewModelFactory()
+        let chatVM = factory.createChatViewModel()
+        let mcpVM = factory.createMCPConnectionViewModel()
+        let authVM = factory.createAuthenticationViewModel()
+        
+        self._viewModel = StateObject(wrappedValue: chatVM)
+        self._mcpConnectionViewModel = StateObject(wrappedValue: mcpVM)
+        self._authViewModel = StateObject(wrappedValue: authVM)
     }
     
     var body: some View {
         NavigationView {
             VStack(spacing: 0) {
-                // 複数サーバー対応ツールステータス表示
-                mcpToolsStatusView
+                // MCP接続ステータス表示
+                mcpConnectionStatusView
                 
                 messageListView
                 
@@ -42,12 +53,12 @@ struct ChatView: View {
     
     // MARK: - View Components
     
-    private var mcpToolsStatusView: some View {
+    private var mcpConnectionStatusView: some View {
         VStack(spacing: 0) {
             HStack {
                 statusIndicator
                 
-                Text(viewModel.mcpToolsStatus)
+                Text(mcpConnectionViewModel.connectionStatus)
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
@@ -67,21 +78,20 @@ struct ChatView: View {
     }
     
     private var statusIndicator: some View {
-        Image(systemName: viewModel.mcpToolsStatus.contains("利用可能") || viewModel.mcpToolsStatus.contains("接続済み") ? "checkmark.circle.fill" : 
-                         viewModel.mcpToolsStatus.contains("接続中") ? "arrow.clockwise" : "exclamationmark.triangle.fill")
-            .foregroundColor(viewModel.mcpToolsStatus.contains("利用可能") || viewModel.mcpToolsStatus.contains("接続済み") ? .green : 
-                           viewModel.mcpToolsStatus.contains("接続中") ? .blue : .orange)
+        Image(systemName: mcpConnectionViewModel.getStatusIconName())
+            .foregroundColor(mcpConnectionViewModel.getStatusColor() == "green" ? .green : 
+                           mcpConnectionViewModel.getStatusColor() == "blue" ? .blue : .orange)
             .imageScale(.small)
     }
     
     private var serverManagementButtons: some View {
         HStack(spacing: 8) {
             // OAuth認証状態のコンパクト表示
-            OAuthStatusCompactView()
+            AuthenticationStatusCompactView(viewModel: authViewModel)
             
             Button("全再接続") {
                 Task {
-                    await viewModel.retryDynamicToolsConnection()
+                    mcpConnectionViewModel.retryAllConnections()
                 }
             }
             .font(.caption2)
@@ -91,7 +101,7 @@ struct ChatView: View {
             .foregroundColor(.blue)
             .cornerRadius(4)
             .frame(height: 24) // 高さを統一
-            .disabled(viewModel.mcpToolsStatus.contains("接続中") || viewModel.mcpToolsStatus.contains("認証"))
+            .disabled(mcpConnectionViewModel.isConnecting)
             
             Button(action: {
                 showServerDetails.toggle()
@@ -115,7 +125,7 @@ struct ChatView: View {
                 .foregroundColor(.secondary)
                 .padding(.horizontal)
             
-            ForEach(viewModel.getServerConnectionStatus(), id: \.url) { server in
+            ForEach(Array(mcpConnectionViewModel.getServerConnectionStatus().enumerated()), id: \.element.url) { index, server in
                 HStack {
                     Circle()
                         .fill(server.isConnected ? Color.green : Color.red)
@@ -130,7 +140,7 @@ struct ChatView: View {
                     if !server.isConnected {
                         Button("再接続") {
                             Task {
-                                await viewModel.retryServerConnection(server.url)
+                                await mcpConnectionViewModel.retryServerConnection(server.url)
                             }
                         }
                         .font(.caption2)
@@ -142,7 +152,7 @@ struct ChatView: View {
                     } else {
                         Button("切断") {
                             Task {
-                                await viewModel.disconnectFromServer(server.url)
+                                await mcpConnectionViewModel.disconnectFromServer(server.url)
                             }
                         }
                         .font(.caption2)
@@ -161,7 +171,7 @@ struct ChatView: View {
             HStack {
                 Button("全て切断") {
                     Task {
-                        await viewModel.disconnectFromAllServers()
+                        await mcpConnectionViewModel.disconnectFromAllServers()
                     }
                 }
                 .font(.caption)
@@ -173,7 +183,7 @@ struct ChatView: View {
                 
                 Spacer()
                 
-                Text("\(viewModel.getConnectionDetails().connected.count)/\(viewModel.getConnectionDetails().totalServers) サーバー接続済み")
+                Text("\(mcpConnectionViewModel.getConnectionStatistics().connected)/\(mcpConnectionViewModel.getConnectionStatistics().total) サーバー接続済み")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }

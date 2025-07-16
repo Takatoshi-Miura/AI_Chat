@@ -33,22 +33,9 @@
 		8D25C2232E0238F100E61E5C /* AI_ChatUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AI_ChatUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		8D25C2C52E25DECF00E61E5C /* Exceptions for "AI_Chat" folder in "AI_Chat" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				"AI-Chat-Info.plist",
-			);
-			target = 8D25C20B2E0238EF00E61E5C /* AI_Chat */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		8D25C20E2E0238EF00E61E5C /* AI_Chat */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				8D25C2C52E25DECF00E61E5C /* Exceptions for "AI_Chat" folder in "AI_Chat" target */,
-			);
 			path = AI_Chat;
 			sourceTree = "<group>";
 		};

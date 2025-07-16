@@ -1,320 +1,113 @@
 import Foundation
 import Combine
-import FoundationModels
 
 @MainActor
 class ChatViewModel: ObservableObject {
-    @Published var messages: [ChatMessage] = []
-    @Published var inputText: String = ""
     @Published var isLoading: Bool = false
-    @Published var mcpToolsStatus: String = "MCPツール: 未接続"
     
-    private var aiService = AIService()
-    private var stepByStepService: StepByStepResponseService
+    // 依存関係
+    private let chatRepository: ChatRepository
+    private let chatService: ChatServiceProtocol
     private var cancellables = Set<AnyCancellable>()
     
-    // 接続するMCPサーバーURL
-    private let mcpServerURLs: [URL] = [
-        URL(string: "https://mcp-weather.get-weather.workers.dev")!,
-        // 追加可能
-    ]
-    
-    // 接続状況を管理
-    private var connectedServers: Set<String> = []
-    private var failedServers: Set<String> = []
-    
-    init() {
-        // StepByStepResponseServiceを同じAIServiceインスタンスで初期化
-        self.stepByStepService = StepByStepResponseService(aiService: aiService)
-        
-        // 初期化時にウェルカムメッセージを追加
-        messages.append(ChatMessage(text: LocalizedStrings.welcomeMessage, isFromUser: false))
-        
-        // MCPツールの初期化を実行
-        initializeMCPTools()
+    // Computed properties
+    var messages: [ChatMessage] {
+        chatRepository.getMessages()
     }
     
-    /// MCPツールを初期化
-    private func initializeMCPTools() {
-        Task {
-            await setupMultipleMCPServers()
-        }
+    var inputText: String {
+        get { AppState.shared.chatState.inputText }
+        set { AppState.shared.chatState.inputText = newValue }
     }
     
-    /// 複数のMCPサーバーに接続してツールを設定（OAuth認証対応）
-    private func setupMultipleMCPServers() async {
-        mcpToolsStatus = "MCPツール: 接続中..."
-        connectedServers.removeAll()
-        failedServers.removeAll()
+    init(
+        chatRepository: ChatRepository,
+        chatService: ChatServiceProtocol
+    ) {
+        self.chatRepository = chatRepository
+        self.chatService = chatService
         
-        // 全てのツールをリセット
-        await aiService.disconnectAllServers()
-        
-        var allAvailableTools: [(name: String, description: String)] = []
-        var connectionResults: [String] = []
-        
-        // 複数サーバーに並列接続（OAuth認証対応）
-        await withTaskGroup(of: (serverName: String, result: Result<[(name: String, description: String)], Error>).self) { group in
-            
-            for serverURL in mcpServerURLs {
-                let serverName = extractServerName(from: serverURL)
-                
-                group.addTask { [weak self] in
-                    do {
-                        // まず保存されたトークンで接続を試行
-                        if await self?.aiService.connectWithStoredToken(serverURL: serverURL) == true {
-                            let serverTools = await self?.aiService.getAvailableDynamicTools() ?? []
-                            return (serverName: serverName, result: .success(serverTools))
-                        } else {
-                            // 保存されたトークンが無効または存在しない場合は新しい認証を実行
-                            try await self?.aiService.connectWithAuthAndUpdateTools(serverURL: serverURL)
-                            let serverTools = await self?.aiService.getAvailableDynamicTools() ?? []
-                            return (serverName: serverName, result: .success(serverTools))
-                        }
-                    } catch {
-                        return (serverName: serverName, result: .failure(error))
-                    }
-                }
+        setupObservers()
+    }
+    
+    // MARK: - Private Methods
+    
+    private func setupObservers() {
+        // ChatRepositoryの変更を監視
+        chatRepository.objectWillChange
+            .sink { [weak self] in
+                self?.objectWillChange.send()
             }
-            
-            // 各接続結果を収集
-            for await taskResult in group {
-                switch taskResult.result {
-                case .success(let serverTools):
-                    allAvailableTools.append(contentsOf: serverTools)
-                    connectedServers.insert(taskResult.serverName)
-                    connectionResults.append("✅ \(taskResult.serverName): \(serverTools.count)個のツール")
-                    
-                    MCPStepNotificationService.shared.notifyStep("✅ \(taskResult.serverName) に認証・接続成功")
-                    
-                case .failure(let error):
-                    failedServers.insert(taskResult.serverName)
-                    connectionResults.append("❌ \(taskResult.serverName): 認証・接続エラー")
-                    
-                    MCPStepNotificationService.shared.notifyStep("❌ \(taskResult.serverName) 認証・接続エラー: \(error.localizedDescription)")
-                }
-                
-                // 進行状況を更新
-                let totalServers = mcpServerURLs.count
-                let completedServers = connectedServers.count + failedServers.count
-                mcpToolsStatus = "MCPツール: 認証・接続中... (\(completedServers)/\(totalServers))"
+            .store(in: &cancellables)
+        
+        // ChatStateの変更を監視
+        AppState.shared.chatState.objectWillChange
+            .sink { [weak self] in
+                self?.objectWillChange.send()
             }
-        }
-        
-        // 接続結果を更新
-        updateConnectionStatus(allTools: allAvailableTools, results: connectionResults)
-        
-        // 利用可能なツールの情報をメッセージに追加
-        if !allAvailableTools.isEmpty {
-            addToolsAvailabilityMessage(tools: allAvailableTools)
-        } else if !failedServers.isEmpty {
-            addConnectionErrorMessage()
-        }
-    }
-    
-    /// 接続状況を更新
-    private func updateConnectionStatus(allTools: [(name: String, description: String)], results: [String]) {
-        let totalServers = mcpServerURLs.count
-        let connectedCount = connectedServers.count
-        _ = failedServers.count
-        
-        if connectedCount == totalServers {
-            // 全サーバー接続成功
-            mcpToolsStatus = "MCPツール: 全\(totalServers)サーバー接続済み (\(allTools.count)個のツール)"
-        } else if connectedCount > 0 {
-            // 一部サーバー接続成功
-            mcpToolsStatus = "MCPツール: \(connectedCount)/\(totalServers)サーバー接続済み (\(allTools.count)個のツール)"
-        } else {
-            // 全サーバー接続失敗
-            mcpToolsStatus = "MCPツール: 全サーバー接続失敗"
-        }
-    }
-    
-    /// 利用可能なツールの情報をメッセージに追加
-    private func addToolsAvailabilityMessage(tools: [(name: String, description: String)]) {
-        var message = "MCPツールが利用可能です:\n"
-        
-        // サーバー別の接続状況
-        message += "\n接続状況:\n"
-        for serverName in connectedServers {
-            message += "✅ \(serverName)\n"
-        }
-        for serverName in failedServers {
-            message += "❌ \(serverName) (接続失敗)\n"
-        }
-        
-        // 利用可能なツール一覧
-        message += "\n利用可能なツール (\(tools.count)個):\n"
-        for tool in tools {
-            message += "・\(tool.name): \(tool.description)\n"
-        }
-        
-        messages.append(ChatMessage(text: message, isFromUser: false))
-    }
-    
-    /// 接続エラーメッセージを追加
-    private func addConnectionErrorMessage() {
-        let errorMessage = "⚠️ 全てのMCPサーバーへの接続に失敗しました。基本機能は利用可能です。\n\n接続を試行したサーバー:\n\(mcpServerURLs.map { "・\(extractServerName(from: $0))" }.joined(separator: "\n"))"
-        messages.append(ChatMessage(text: errorMessage, isFromUser: false))
+            .store(in: &cancellables)
     }
     
     /// 初期化エラーをチャットに追加
     func addInitializationError(_ errorMessage: String) {
-        let errorChatMessage = ChatMessage(text: "⚠️ 初期化エラー\n\n\(errorMessage)", isFromUser: false)
-        messages.append(errorChatMessage)
-    }
-
-    /// URLからサーバー名を抽出
-    private func extractServerName(from url: URL) -> String {
-        let host = url.host ?? "不明なサーバー"
-        return host
-    }
-    
-    /// 全てのMCPサーバーとの再接続を試行
-    func retryDynamicToolsConnection() {
-        Task {
-            await setupMultipleMCPServers()
-        }
+        chatRepository.addInitializationError(errorMessage)
     }
     
     /// メッセージを送信する
     func sendMessage() {
-        guard !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard AppState.shared.chatState.isInputValid() else { return }
         
         let userMessage = inputText
-        inputText = ""
+        AppState.shared.chatState.clearInputText()
         
         // ユーザーメッセージを追加
-        messages.append(ChatMessage(text: userMessage, isFromUser: true))
+        chatRepository.addMessage(ChatMessage(text: userMessage, isFromUser: true))
         
-        // 段階的AI応答を開始
+        // AI応答を生成
         Task {
-            await generateStepByStepAIResponse(for: userMessage)
+            await generateAIResponse(for: userMessage)
         }
     }
     
-    /// 段階的AI応答を生成する
-    private func generateStepByStepAIResponse(for message: String) async {
+    /// AI応答を生成する
+    private func generateAIResponse(for message: String) async {
         isLoading = true
+        AppState.shared.chatState.setLoading(true)
         
-        // 段階的回答サービスを使用
-        await stepByStepService.generateStepByStepResponse(
-            for: message,
+        await chatService.sendMessage(
+            message,
             onStepUpdate: { [weak self] stepMessage in
-                Task { @MainActor in
-                    self?.messages.append(stepMessage)
-                }
+                self?.chatRepository.addMessage(stepMessage)
             },
             onFinalResponse: { [weak self] finalResponse in
-                Task { @MainActor in
-                    self?.completeStepByStepResponse(with: finalResponse)
-                }
+                self?.completeAIResponse(with: finalResponse)
             }
         )
         
         isLoading = false
+        AppState.shared.chatState.setLoading(false)
     }
  
-    /// 段階的回答を完了し、最終回答を追加
-    private func completeStepByStepResponse(with finalResponse: String) {
+    /// AI応答を完了し、最終回答を追加
+    private func completeAIResponse(with finalResponse: String) {
         let finalMessage = ChatMessage(
             text: finalResponse,
             isFromUser: false
         )
-        messages.append(finalMessage)
+        chatRepository.addMessage(finalMessage)
         
-        // AIServiceでエラーが発生した場合はエラーメッセージをチャットに追加
-        if let aiServiceError = aiService.errorMessage {
-            let errorChatMessage = ChatMessage(text: "⚠️ \(aiServiceError)", isFromUser: false)
-            messages.append(errorChatMessage)
-            aiService.clearError()
+        // エラーがある場合はエラーメッセージをチャットに追加
+        if chatService.hasError() {
+            if let errorMessage = chatService.getErrorMessage() {
+                let errorChatMessage = ChatMessage(text: "⚠️ \(errorMessage)", isFromUser: false)
+                chatRepository.addMessage(errorChatMessage)
+                chatService.clearError()
+            }
         }
     }
     
     /// チャット履歴をクリア
     func clearMessages() {
-        messages = [ChatMessage(text: LocalizedStrings.welcomeMessage, isFromUser: false)]
-    }
-    
-    // MARK: - Server Management
-    
-    /// 特定のサーバーとの再接続を試行（OAuth認証対応）
-    func retryServerConnection(_ serverURL: URL) async {
-        let serverName = extractServerName(from: serverURL)
-        mcpToolsStatus = "MCPツール: \(serverName) に再認証・接続中..."
-        
-        // 失敗リストから削除し、まず既存の接続を切断
-        failedServers.remove(serverName)
-        connectedServers.remove(serverName)
-        await aiService.disconnectFromServer(serverURL)
-        
-        do {
-            // まず保存されたトークンで接続を試行
-            if await aiService.connectWithStoredToken(serverURL: serverURL) {
-                connectedServers.insert(serverName)
-                
-                let allTools = aiService.getAvailableDynamicTools()
-                updateConnectionStatus(allTools: allTools, results: [])
-                
-                MCPStepNotificationService.shared.notifyStep("✅ \(serverName) への再接続が成功しました")
-            } else {
-                // 保存されたトークンが無効または存在しない場合は新しい認証を実行
-                try await aiService.connectWithAuthAndUpdateTools(serverURL: serverURL)
-                connectedServers.insert(serverName)
-                
-                let allTools = aiService.getAvailableDynamicTools()
-                updateConnectionStatus(allTools: allTools, results: [])
-                
-                MCPStepNotificationService.shared.notifyStep("✅ \(serverName) への再認証・接続が成功しました")
-            }
-        } catch {
-            failedServers.insert(serverName)
-            mcpToolsStatus = "MCPツール: \(serverName) 再認証・接続失敗"
-            
-            MCPStepNotificationService.shared.notifyStep("❌ \(serverName) への再認証・接続に失敗: \(error.localizedDescription)")
-        }
-    }
-    
-    /// 特定のサーバーから切断
-    func disconnectFromServer(_ serverURL: URL) async {
-        let serverName = extractServerName(from: serverURL)
-        
-        await aiService.disconnectFromServer(serverURL)
-        connectedServers.remove(serverName)
-        
-        let allTools = aiService.getAvailableDynamicTools()
-        updateConnectionStatus(allTools: allTools, results: [])
-        
-        MCPStepNotificationService.shared.notifyStep("\(serverName) から切断しました")
-    }
-    
-    /// 全サーバーから切断
-    func disconnectFromAllServers() async {
-        await aiService.disconnectAllServers()
-        connectedServers.removeAll()
-        failedServers.removeAll()
-        mcpToolsStatus = "MCPツール: 全サーバー切断済み"
-        MCPStepNotificationService.shared.notifyStep("全MCPサーバーから切断しました")
-    }
-    
-    // MARK: - Debug & Configuration
-    
-    /// 接続状況の詳細を取得（デバッグ用）
-    func getConnectionDetails() -> (connected: [String], failed: [String], totalServers: Int) {
-        return (Array(connectedServers), Array(failedServers), mcpServerURLs.count)
-    }
-    
-    /// 設定されているサーバーURL一覧を取得
-    func getConfiguredServers() -> [URL] {
-        return mcpServerURLs
-    }
-    
-    /// サーバー別の接続状況を取得
-    func getServerConnectionStatus() -> [(serverName: String, isConnected: Bool, url: URL)] {
-        return mcpServerURLs.map { url in
-            let serverName = extractServerName(from: url)
-            let isConnected = connectedServers.contains(serverName)
-            return (serverName: serverName, isConnected: isConnected, url: url)
-        }
+        chatRepository.clearMessages()
     }
 } 
