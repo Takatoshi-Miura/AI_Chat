@@ -9,6 +9,7 @@ class MCPClientService: ObservableObject {
     // MARK: - Properties
     private let client: Client
     private var transport: HTTPClientTransport?
+    private var customTransport: CustomAuthenticatedHTTPTransport?
     @Published var isConnected = false
     @Published var availableTools: [MCP.Tool] = []
     
@@ -35,7 +36,7 @@ class MCPClientService: ObservableObject {
         )
         
         guard let transport = transport else {
-            throw MCPError.invalidRequest("Transportの作成に失敗しました")
+            throw NSError(domain: "MCPError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Transportの作成に失敗しました"])
         }
         
         // 接続実行
@@ -47,12 +48,80 @@ class MCPClientService: ObservableObject {
         availableTools = try await listTools()
     }
     
+    /// OAuth認証付きでMCPサーバーに接続
+    /// - Parameters:
+    ///   - endpoint: 接続先のURL
+    ///   - accessToken: OAuth アクセストークン
+    func connectWithAuth(to endpoint: URL, accessToken: String) async throws {
+        MCPStepNotificationService.shared.notifyStep("OAuth認証付きでMCPサーバーへの接続を開始しています...")
+        
+        // カスタム認証トランスポートを作成
+        customTransport = CustomAuthenticatedHTTPTransport(
+            endpoint: endpoint,
+            accessToken: accessToken,
+            streaming: true
+        )
+        
+        // 基本的なMCPハンドシェイクを実行
+        let initializePayload = [
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": [
+                "protocolVersion": "2024-11-05",
+                "capabilities": [
+                    "tools": [:]
+                ]
+            ]
+        ] as [String : Any]
+        
+        guard let customTransport = customTransport else {
+            throw NSError(domain: "MCPError", code: -1, userInfo: [NSLocalizedDescriptionKey: "カスタムトランスポートの作成に失敗しました"])
+        }
+        
+        // 初期化リクエストを送信
+        let response = try await customTransport.sendRequest(initializePayload)
+        
+        // レスポンスを確認
+        if let error = response["error"] {
+            throw NSError(domain: "MCPError", code: -1, userInfo: [NSLocalizedDescriptionKey: "初期化エラー: \(error)"])
+        }
+        
+        // 初期化完了通知を送信
+        let initializedPayload = [
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": [:]
+        ] as [String : Any]
+        
+        _ = try await customTransport.sendRequest(initializedPayload)
+        
+        isConnected = true
+        MCPStepNotificationService.shared.notifyStep("✅ OAuth認証付きMCPサーバーに接続完了")
+        
+        // ツール一覧を取得
+        availableTools = try await listToolsWithAuth()
+    }
+    
+    /// 指定されたサーバーの認証状態を確認
+    /// - Parameters:
+    ///   - endpoint: 接続先のURL
+    ///   - accessToken: OAuth アクセストークン
+    /// - Returns: 認証が有効な場合はtrue
+    func validateAuthentication(endpoint: URL, accessToken: String) async -> Bool {
+        return await AuthenticatedTransportFactory.validateToken(endpoint: endpoint, accessToken: accessToken)
+    }
+    
     /// MCPサーバーから切断
     func disconnect() async {
         MCPStepNotificationService.shared.notifyStep("MCPサーバーから切断しています...")
         
-        await client.disconnect()
-        transport = nil
+        if transport != nil {
+            await client.disconnect()
+            transport = nil
+        }
+        
+        customTransport = nil
         isConnected = false
         availableTools = []
         
@@ -62,78 +131,87 @@ class MCPClientService: ObservableObject {
     // MARK: - Tools
     
     /// 利用可能なツール一覧を取得
+    /// - Returns: ツール一覧
     private func listTools() async throws -> [MCP.Tool] {
         guard isConnected else {
-            throw MCPError.invalidRequest("サーバーに接続されていません")
+            throw NSError(domain: "MCPError", code: -1, userInfo: [NSLocalizedDescriptionKey: "サーバーに接続されていません"])
         }
         
-        let result = try await client.listTools()
-        if result.tools.isEmpty {
-            MCPStepNotificationService.shared.notifyStep("利用可能なMCPツールが見つかりませんでした")
-            return result.tools
+        do {
+            let result = try await client.listTools()
+            let tools = result.tools
+            MCPStepNotificationService.shared.notifyStep("✅ ツール一覧を取得しました (\(tools.count)個)")
+            return tools
+        } catch {
+            MCPStepNotificationService.shared.notifyStep("❌ ツール一覧の取得に失敗しました: \(error.localizedDescription)")
+            throw error
         }
-        
-        let toolNames = result.tools.map { $0.name }.joined(separator: ", ")
-        MCPStepNotificationService.shared.notifyStep("利用可能なMCPツール: \(toolNames)")
-        return result.tools
     }
     
-    /// MCPツールの詳細情報を取得
+    /// OAuth認証付きでツール一覧を取得
+    /// - Returns: ツール一覧
+    private func listToolsWithAuth() async throws -> [MCP.Tool] {
+        guard let customTransport = customTransport else {
+            throw NSError(domain: "MCPError", code: -1, userInfo: [NSLocalizedDescriptionKey: "認証付きトランスポートが設定されていません"])
+        }
+        
+        let listToolsPayload = [
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/list",
+            "params": [:]
+        ] as [String : Any]
+        
+        do {
+            let response = try await customTransport.sendRequest(listToolsPayload)
+            
+            if let error = response["error"] {
+                throw NSError(domain: "MCPError", code: -1, userInfo: [NSLocalizedDescriptionKey: "ツール一覧取得エラー: \(error)"])
+            }
+            
+            guard let result = response["result"] as? [String: Any],
+                  let toolsArray = result["tools"] as? [[String: Any]] else {
+                throw NSError(domain: "MCPError", code: -1, userInfo: [NSLocalizedDescriptionKey: "無効なツール一覧レスポンス"])
+            }
+            
+            let tools = toolsArray.compactMap { toolDict -> MCP.Tool? in
+                guard let name = toolDict["name"] as? String else { return nil }
+                let description = toolDict["description"] as? String
+                let inputSchema = toolDict["inputSchema"] as? [String: Any]
+                
+                // [String: Any]をValue?に変換
+                let inputSchemaValue: Value? = inputSchema != nil ? convertToValue(inputSchema!) : nil
+                
+                return MCP.Tool(
+                    name: name,
+                    description: description ?? "",
+                    inputSchema: inputSchemaValue
+                )
+            }
+            
+            MCPStepNotificationService.shared.notifyStep("✅ 認証付きツール一覧を取得しました (\(tools.count)個)")
+            return tools
+        } catch {
+            MCPStepNotificationService.shared.notifyStep("❌ 認証付きツール一覧の取得に失敗しました: \(error.localizedDescription)")
+            throw error
+        }
+    }
+    
+    /// ツールの詳細情報を取得
     /// - Parameter toolName: ツール名
-    /// - Returns: ツールの詳細情報
+    /// - Returns: (説明, 入力スキーマ)
     func getToolDetails(_ toolName: String) -> (description: String?, inputSchema: [String: Any]?) {
         guard let tool = availableTools.first(where: { $0.name == toolName }) else {
             return (nil, nil)
         }
         
-        print("=== Tool Details Debug for \(toolName) ===")
+        // Value?を[String: Any]?に変換
+        let inputSchemaDict: [String: Any]? = tool.inputSchema != nil ? convertValueToDict(tool.inputSchema!) : nil
         
-        // Reflectionを使ってツールのプロパティを調査
-        let mirror = Mirror(reflecting: tool)
-        var description: String?
-        var inputSchema: [String: Any]?
-        
-        for (label, value) in mirror.children {
-            if let propertyName = label {
-                print("Property: \(propertyName) = \(value) (Type: \(type(of: value)))")
-                
-                switch propertyName.lowercased() {
-                case "description":
-                    description = value as? String
-                    print("  Found description: \(description ?? "nil")")
-                case "inputschema", "input_schema", "schema":
-                    print("  Found schema property: \(value)")
-                    if let schemaDict = value as? [String: Any] {
-                        inputSchema = schemaDict
-                        print("  Schema as dict: \(schemaDict)")
-                    } else {
-                        // 他の形式のスキーマ情報を試してみる
-                        print("  Schema is not [String: Any], trying other formats...")
-                        let schemaMirror = Mirror(reflecting: value)
-                        var extractedSchema: [String: Any] = [:]
-                        for (schemaLabel, schemaValue) in schemaMirror.children {
-                            if let key = schemaLabel {
-                                print("    Schema property: \(key) = \(schemaValue)")
-                                extractedSchema[key] = schemaValue
-                            }
-                        }
-                        if !extractedSchema.isEmpty {
-                            inputSchema = extractedSchema
-                        }
-                    }
-                default:
-                    break
-                }
-            }
-        }
-        
-        print("Final result - Description: \(description ?? "nil"), Schema: \(inputSchema ?? [:])")
-        print("==========================================")
-        
-        return (description, inputSchema)
+        return (description: tool.description, inputSchema: inputSchemaDict)
     }
     
-    /// 指定されたツールが利用可能かどうかを確認
+    /// ツールが利用可能かチェック
     /// - Parameter toolName: ツール名
     /// - Returns: ツールが利用可能な場合はtrue
     func isToolAvailable(_ toolName: String) -> Bool {
@@ -147,13 +225,19 @@ class MCPClientService: ObservableObject {
     /// - Returns: ツールの実行結果とエラー状態
     func callTool(name toolName: String, arguments: [String: Value] = [:]) async throws -> (content: String, isError: Bool) {
         guard isConnected else {
-            throw MCPError.invalidRequest("サーバーに接続されていません")
+            throw NSError(domain: "MCPError", code: -1, userInfo: [NSLocalizedDescriptionKey: "サーバーに接続されていません"])
         }
         
         // 引数の詳細を表示
         let argumentsText = arguments.isEmpty ? "なし" : arguments.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
         MCPStepNotificationService.shared.notifyStep("MCPツール '\(toolName)' を実行中... (引数: \(argumentsText))")
         
+        // カスタムトランスポートを使用する場合
+        if let customTransport = customTransport {
+            return try await callToolWithAuth(name: toolName, arguments: arguments, transport: customTransport)
+        }
+        
+        // 標準トランスポートを使用する場合
         do {
             let (content, isError) = try await client.callTool(
                 name: toolName,
@@ -177,73 +261,141 @@ class MCPClientService: ObservableObject {
         }
     }
     
+    /// OAuth認証付きでツールを呼び出し
+    /// - Parameters:
+    ///   - toolName: ツール名
+    ///   - arguments: 引数
+    ///   - transport: カスタムトランスポート
+    /// - Returns: ツールの実行結果とエラー状態
+    private func callToolWithAuth(name toolName: String, arguments: [String: Value], transport: CustomAuthenticatedHTTPTransport) async throws -> (content: String, isError: Bool) {
+        
+        // MCP Value を JSON 互換の値に変換
+        let jsonArguments = convertMCPValuesToJSON(arguments)
+        
+        let callToolPayload = [
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": [
+                "name": toolName,
+                "arguments": jsonArguments
+            ]
+        ] as [String : Any]
+        
+        do {
+            let response = try await transport.sendRequest(callToolPayload)
+            
+            if let error = response["error"] {
+                MCPStepNotificationService.shared.notifyStep("❌ MCPツール '\(toolName)' の実行でエラーが発生しました")
+                return ("エラー: \(error)", true)
+            }
+            
+            guard let result = response["result"] as? [String: Any] else {
+                throw NSError(domain: "MCPError", code: -1, userInfo: [NSLocalizedDescriptionKey: "無効なツール実行レスポンス"])
+            }
+            
+            let content = extractTextFromAny(result["content"] ?? "")
+            let isError = result["isError"] as? Bool ?? false
+            
+            if isError {
+                MCPStepNotificationService.shared.notifyStep("❌ MCPツール '\(toolName)' の実行でエラーが発生しました")
+            } else {
+                MCPStepNotificationService.shared.notifyStep("✅ MCPツール '\(toolName)' の実行が完了しました")
+            }
+            
+            return (content, isError)
+        } catch {
+            MCPStepNotificationService.shared.notifyStep("❌ MCPツール '\(toolName)' の呼び出しで例外が発生しました: \(error.localizedDescription)")
+            throw error
+        }
+    }
+    
     // MARK: - Utility Methods
     
-    /// 任意の型からテキストを抽出
-    /// - Parameter content: コンテンツ
-    /// - Returns: 抽出されたテキスト
+    /// MCP Value を JSON 互換の値に変換
+    /// - Parameter values: MCP Value の辞書
+    /// - Returns: JSON 互換の値の辞書
+    private func convertMCPValuesToJSON(_ values: [String: Value]) -> [String: Any] {
+        var result: [String: Any] = [:]
+        
+        for (key, value) in values {
+            switch value {
+            case .string(let str):
+                result[key] = str
+            case .double(let num):
+                result[key] = num
+            case .bool(let bool):
+                result[key] = bool
+            case .array(let arr):
+                result[key] = arr.map { convertValueToJSON($0) }
+            case .object(let obj):
+                result[key] = obj.mapValues { convertValueToJSON($0) }
+            case .null:
+                result[key] = NSNull()
+            @unknown default:
+                result[key] = NSNull()
+            }
+        }
+        
+        return result
+    }
+    
+    /// 個別の Value を JSON 互換の値に変換
+    /// - Parameter value: MCP Value
+    /// - Returns: JSON 互換の値
+    private func convertValueToJSON(_ value: Value) -> Any {
+        switch value {
+        case .string(let str):
+            return str
+        case .double(let num):
+            return num
+        case .bool(let bool):
+            return bool
+        case .array(let arr):
+            return arr.map { convertValueToJSON($0) }
+        case .object(let obj):
+            return obj.mapValues { convertValueToJSON($0) }
+        case .null:
+            return NSNull()
+        @unknown default:
+            return NSNull()
+        }
+    }
+    
+    /// Any値からテキストを抽出
     private func extractTextFromAny(_ content: Any) -> String {
         if let string = content as? String {
             return string
-        }
-        
-        if let array = content as? [Any] {
+        } else if let array = content as? [Any] {
             return array.compactMap { item in
-                if let string = item as? String {
-                    return string
+                if let dict = item as? [String: Any],
+                   let text = dict["text"] as? String {
+                    return text
                 }
                 return String(describing: item)
             }.joined(separator: "\n")
-        }
-        
-        if let dict = content as? [String: Any] {
+        } else if let dict = content as? [String: Any] {
             if let text = dict["text"] as? String {
                 return text
             }
-            if let content = dict["content"] as? String {
-                return content
-            }
+            return dict.compactMap { key, value in
+                "\(key): \(value)"
+            }.joined(separator: "\n")
+        } else {
+            return String(describing: content)
         }
-        
-        return String(describing: content)
     }
     
-    // MARK: - Helper Methods for Value Conversion
-    
-    /// String値をValueに変換
-    func stringValue(_ string: String) -> Value {
-        return .string(string)
+    /// Value配列を作成
+    private func arrayValue(_ array: [Any]) -> Value {
+        let values = array.compactMap { convertToValue($0) }
+        return .array(values)
     }
     
-    /// Int値をValueに変換
-    func intValue(_ int: Int) -> Value {
-        return .string(String(int))
-    }
-    
-    /// Double値をValueに変換
-    func doubleValue(_ double: Double) -> Value {
-        return .string(String(double))
-    }
-    
-    /// Bool値をValueに変換
-    func boolValue(_ bool: Bool) -> Value {
-        return .string(String(bool))
-    }
-    
-    /// Array値をValueに変換
-    func arrayValue(_ array: [Any]) -> Value {
-        let convertedArray = array.compactMap { value -> Value? in
-            return convertToValue(value)
-        }
-        return .array(convertedArray)
-    }
-    
-    /// Dictionary値をValueに変換
-    func objectValue(_ dict: [String: Any]) -> Value {
-        let convertedDict = dict.compactMapValues { value -> Value? in
-            return convertToValue(value)
-        }
-        return .object(convertedDict)
+    /// Valueオブジェクトを作成
+    private func objectValue(_ dict: [String: Any]) -> Value {
+        let values = dict.compactMapValues { convertToValue($0) }
+        return .object(values)
     }
     
     /// Any値をValueに変換
@@ -252,11 +404,11 @@ class MCPClientService: ObservableObject {
         case let string as String:
             return .string(string)
         case let int as Int:
-            return .string(String(int))
+            return .double(Double(int))
         case let double as Double:
-            return .string(String(double))
+            return .double(double)
         case let bool as Bool:
-            return .string(String(bool))
+            return .bool(bool)
         case let array as [Any]:
             return arrayValue(array)
         case let dict as [String: Any]:
@@ -264,6 +416,32 @@ class MCPClientService: ObservableObject {
         default:
             return nil
         }
+    }
+    
+    /// ValueをAnyに変換（逆変換）
+    private func convertValueToAny(_ value: Value) -> Any {
+        switch value {
+        case .string(let str):
+            return str
+        case .double(let num):
+            return num
+        case .bool(let bool):
+            return bool
+        case .array(let arr):
+            return arr.map { convertValueToAny($0) }
+        case .object(let obj):
+            return obj.mapValues { convertValueToAny($0) }
+        case .null:
+            return NSNull()
+        @unknown default:
+            return NSNull()
+        }
+    }
+    
+    /// ValueをDictに変換
+    private func convertValueToDict(_ value: Value) -> [String: Any]? {
+        let anyValue = convertValueToAny(value)
+        return anyValue as? [String: Any]
     }
     
     /// 辞書をValue辞書に変換する便利メソッド

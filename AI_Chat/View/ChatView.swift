@@ -76,6 +76,9 @@ struct ChatView: View {
     
     private var serverManagementButtons: some View {
         HStack(spacing: 8) {
+            // OAuth認証状態のコンパクト表示
+            OAuthStatusCompactView()
+            
             Button("全再接続") {
                 Task {
                     await viewModel.retryDynamicToolsConnection()
@@ -87,18 +90,22 @@ struct ChatView: View {
             .background(Color.blue.opacity(0.1))
             .foregroundColor(.blue)
             .cornerRadius(4)
-            .disabled(viewModel.mcpToolsStatus.contains("接続中"))
+            .frame(height: 24) // 高さを統一
+            .disabled(viewModel.mcpToolsStatus.contains("接続中") || viewModel.mcpToolsStatus.contains("認証"))
             
             Button(action: {
                 showServerDetails.toggle()
             }) {
                 Image(systemName: showServerDetails ? "chevron.up" : "chevron.down")
-                    .font(.caption)
+                    .font(.caption2)
+                    .imageScale(.small)
             }
             .foregroundColor(.blue)
-            .frame(minWidth: 30)
-            .padding(.horizontal, 4)
+            .frame(width: 24, height: 24) // サイズを統一
+            .background(Color.blue.opacity(0.1))
+            .cornerRadius(4)
         }
+        .frame(height: 24) // HStack全体の高さを統一
     }
     
     private var serverDetailsView: some View {

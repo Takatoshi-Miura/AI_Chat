@@ -57,6 +57,102 @@ class AIService {
         MCPStepNotificationService.shared.notifyStep("✅ \(serverName)のMCPツールが利用可能になりました: \(newServerTools.map { $0.name }.joined(separator: ", "))")
     }
     
+    /// OAuth認証付きでMCPサーバーに接続して動的ツールを作成・追加
+    /// - Parameter serverURL: MCPサーバーのURL
+    func connectWithAuthAndUpdateTools(serverURL: URL) async throws {
+        let serverKey = generateServerKey(from: serverURL)
+        let serverName = extractServerName(from: serverURL)
+        
+        // 既存の接続があれば切断してから再接続
+        if let existingClient = mcpClients[serverKey] {
+            await existingClient.disconnect()
+        }
+        
+        MCPStepNotificationService.shared.notifyStep("OAuth認証を確認しています...")
+        
+        // OAuth認証を実行
+        let oauthService = OAuthService.shared
+        let accessToken: String
+        
+        do {
+            accessToken = try await oauthService.authenticate(serverURL: serverURL)
+        } catch {
+            MCPStepNotificationService.shared.notifyStep("❌ OAuth認証に失敗しました: \(error.localizedDescription)")
+            throw error
+        }
+        
+        // 新しいクライアントを作成
+        let mcpClient = MCPClientService()
+        mcpClients[serverKey] = mcpClient
+        
+        // OAuth認証付きでMCPサーバーに接続＆MCPツール取得
+        try await mcpClient.connectWithAuth(to: serverURL, accessToken: accessToken)
+        
+        // MCPツールをFoundationModels.Toolに変換
+        let toolService = DynamicMCPToolService(mcpService: mcpClient)
+        dynamicToolServices[serverKey] = toolService
+        let newServerTools = toolService.createAllDynamicTools()
+        serverTools[serverKey] = newServerTools
+        
+        // 全ツールを再構築
+        rebuildAllTools()
+        
+        MCPStepNotificationService.shared.notifyStep("✅ \(serverName)のOAuth認証付きMCPツールが利用可能になりました: \(newServerTools.map { $0.name }.joined(separator: ", "))")
+    }
+    
+    /// 保存されたトークンを使用してMCPサーバーに接続
+    /// - Parameter serverURL: MCPサーバーのURL
+    /// - Returns: 接続が成功した場合はtrue
+    func connectWithStoredToken(serverURL: URL) async -> Bool {
+        let serverKey = generateServerKey(from: serverURL)
+        let serverName = extractServerName(from: serverURL)
+        
+        // 保存されたトークンを確認
+        guard let accessToken = TokenStorage.shared.getToken(for: serverURL) else {
+            MCPStepNotificationService.shared.notifyStep("⚠️ \(serverName)の保存されたトークンが見つかりません")
+            return false
+        }
+        
+        // 既存の接続があれば切断
+        if let existingClient = mcpClients[serverKey] {
+            await existingClient.disconnect()
+        }
+        
+        // 新しいクライアントを作成
+        let mcpClient = MCPClientService()
+        
+        // トークンの有効性を確認
+        if await mcpClient.validateAuthentication(endpoint: serverURL, accessToken: accessToken) {
+            do {
+                mcpClients[serverKey] = mcpClient
+                
+                // OAuth認証付きでMCPサーバーに接続
+                try await mcpClient.connectWithAuth(to: serverURL, accessToken: accessToken)
+                
+                // MCPツールをFoundationModels.Toolに変換
+                let toolService = DynamicMCPToolService(mcpService: mcpClient)
+                dynamicToolServices[serverKey] = toolService
+                let newServerTools = toolService.createAllDynamicTools()
+                serverTools[serverKey] = newServerTools
+                
+                // 全ツールを再構築
+                rebuildAllTools()
+                
+                MCPStepNotificationService.shared.notifyStep("✅ \(serverName)に保存されたトークンで接続しました")
+                return true
+                
+            } catch {
+                MCPStepNotificationService.shared.notifyStep("❌ \(serverName)への接続に失敗しました: \(error.localizedDescription)")
+                return false
+            }
+        } else {
+            MCPStepNotificationService.shared.notifyStep("⚠️ \(serverName)の保存されたトークンが無効です")
+            // 無効なトークンを削除
+            TokenStorage.shared.deleteToken(for: serverURL)
+            return false
+        }
+    }
+    
     /// 全てのサーバーから切断
     func disconnectAllServers() async {
         for (serverKey, client) in mcpClients {

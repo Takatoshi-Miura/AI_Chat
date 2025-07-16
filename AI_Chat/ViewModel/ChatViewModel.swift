@@ -41,7 +41,7 @@ class ChatViewModel: ObservableObject {
         }
     }
     
-    /// 複数のMCPサーバーに接続してツールを設定
+    /// 複数のMCPサーバーに接続してツールを設定（OAuth認証対応）
     private func setupMultipleMCPServers() async {
         mcpToolsStatus = "MCPツール: 接続中..."
         connectedServers.removeAll()
@@ -53,7 +53,7 @@ class ChatViewModel: ObservableObject {
         var allAvailableTools: [(name: String, description: String)] = []
         var connectionResults: [String] = []
         
-        // 複数サーバーに並列接続
+        // 複数サーバーに並列接続（OAuth認証対応）
         await withTaskGroup(of: (serverName: String, result: Result<[(name: String, description: String)], Error>).self) { group in
             
             for serverURL in mcpServerURLs {
@@ -61,10 +61,16 @@ class ChatViewModel: ObservableObject {
                 
                 group.addTask { [weak self] in
                     do {
-                        // 各サーバーに並列接続
-                        try await self?.aiService.connectAndUpdateTools(serverURL: serverURL)
-                        let serverTools = await self?.aiService.getAvailableDynamicTools() ?? []
-                        return (serverName: serverName, result: .success(serverTools))
+                        // まず保存されたトークンで接続を試行
+                        if await self?.aiService.connectWithStoredToken(serverURL: serverURL) == true {
+                            let serverTools = await self?.aiService.getAvailableDynamicTools() ?? []
+                            return (serverName: serverName, result: .success(serverTools))
+                        } else {
+                            // 保存されたトークンが無効または存在しない場合は新しい認証を実行
+                            try await self?.aiService.connectWithAuthAndUpdateTools(serverURL: serverURL)
+                            let serverTools = await self?.aiService.getAvailableDynamicTools() ?? []
+                            return (serverName: serverName, result: .success(serverTools))
+                        }
                     } catch {
                         return (serverName: serverName, result: .failure(error))
                     }
@@ -79,19 +85,19 @@ class ChatViewModel: ObservableObject {
                     connectedServers.insert(taskResult.serverName)
                     connectionResults.append("✅ \(taskResult.serverName): \(serverTools.count)個のツール")
                     
-                    MCPStepNotificationService.shared.notifyStep("✅ \(taskResult.serverName) に接続成功")
+                    MCPStepNotificationService.shared.notifyStep("✅ \(taskResult.serverName) に認証・接続成功")
                     
                 case .failure(let error):
                     failedServers.insert(taskResult.serverName)
-                    connectionResults.append("❌ \(taskResult.serverName): 接続エラー")
+                    connectionResults.append("❌ \(taskResult.serverName): 認証・接続エラー")
                     
-                    MCPStepNotificationService.shared.notifyStep("❌ \(taskResult.serverName) 接続エラー: \(error.localizedDescription)")
+                    MCPStepNotificationService.shared.notifyStep("❌ \(taskResult.serverName) 認証・接続エラー: \(error.localizedDescription)")
                 }
                 
                 // 進行状況を更新
                 let totalServers = mcpServerURLs.count
                 let completedServers = connectedServers.count + failedServers.count
-                mcpToolsStatus = "MCPツール: 接続中... (\(completedServers)/\(totalServers))"
+                mcpToolsStatus = "MCPツール: 認証・接続中... (\(completedServers)/\(totalServers))"
             }
         }
         
@@ -232,10 +238,10 @@ class ChatViewModel: ObservableObject {
     
     // MARK: - Server Management
     
-    /// 特定のサーバーとの再接続を試行
+    /// 特定のサーバーとの再接続を試行（OAuth認証対応）
     func retryServerConnection(_ serverURL: URL) async {
         let serverName = extractServerName(from: serverURL)
-        mcpToolsStatus = "MCPツール: \(serverName) に再接続中..."
+        mcpToolsStatus = "MCPツール: \(serverName) に再認証・接続中..."
         
         // 失敗リストから削除し、まず既存の接続を切断
         failedServers.remove(serverName)
@@ -243,18 +249,29 @@ class ChatViewModel: ObservableObject {
         await aiService.disconnectFromServer(serverURL)
         
         do {
-            try await aiService.connectAndUpdateTools(serverURL: serverURL)
-            connectedServers.insert(serverName)
-            
-            let allTools = aiService.getAvailableDynamicTools()
-            updateConnectionStatus(allTools: allTools, results: [])
-            
-            MCPStepNotificationService.shared.notifyStep("✅ \(serverName) への再接続が成功しました")
+            // まず保存されたトークンで接続を試行
+            if await aiService.connectWithStoredToken(serverURL: serverURL) {
+                connectedServers.insert(serverName)
+                
+                let allTools = aiService.getAvailableDynamicTools()
+                updateConnectionStatus(allTools: allTools, results: [])
+                
+                MCPStepNotificationService.shared.notifyStep("✅ \(serverName) への再接続が成功しました")
+            } else {
+                // 保存されたトークンが無効または存在しない場合は新しい認証を実行
+                try await aiService.connectWithAuthAndUpdateTools(serverURL: serverURL)
+                connectedServers.insert(serverName)
+                
+                let allTools = aiService.getAvailableDynamicTools()
+                updateConnectionStatus(allTools: allTools, results: [])
+                
+                MCPStepNotificationService.shared.notifyStep("✅ \(serverName) への再認証・接続が成功しました")
+            }
         } catch {
             failedServers.insert(serverName)
-            mcpToolsStatus = "MCPツール: \(serverName) 再接続失敗"
+            mcpToolsStatus = "MCPツール: \(serverName) 再認証・接続失敗"
             
-            MCPStepNotificationService.shared.notifyStep("❌ \(serverName) への再接続に失敗: \(error.localizedDescription)")
+            MCPStepNotificationService.shared.notifyStep("❌ \(serverName) への再認証・接続に失敗: \(error.localizedDescription)")
         }
     }
     
