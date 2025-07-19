@@ -7,6 +7,7 @@ struct ChatView: View {
     @StateObject private var authViewModel: AuthenticationViewModel
     @FocusState private var isInputFocused: Bool
     @State private var showServerDetails = false
+    @State private var showServerInfoModal = false
     
     let initializationError: String?
     
@@ -49,6 +50,14 @@ struct ChatView: View {
                 viewModel.addInitializationError(errorMessage)
             }
         }
+        .sheet(isPresented: $showServerInfoModal) {
+            MCPServerInfoModalView(
+                mcpConnectionViewModel: mcpConnectionViewModel,
+                authViewModel: authViewModel,
+                isPresented: $showServerInfoModal
+            )
+            .interactiveDismissDisabled()
+        }
     }
     
     // MARK: - View Components
@@ -86,34 +95,25 @@ struct ChatView: View {
     
     private var serverManagementButtons: some View {
         HStack(spacing: 8) {
-            // OAuth認証状態のコンパクト表示
-            AuthenticationStatusCompactView(viewModel: authViewModel)
-            
-            Button("全再接続") {
-                Task {
-                    mcpConnectionViewModel.retryAllConnections()
+            Button(action: {
+                showServerInfoModal = true
+            }) {
+                HStack(spacing: 4) {
+                    Image(systemName: "info.circle")
+                        .font(.caption2)
+                        .imageScale(.small)
+                    
+                    Text(LocalizedStrings.serverInfo)
+                        .font(.caption2)
+                        .lineLimit(1)
                 }
             }
-            .font(.caption2)
+            .foregroundColor(.blue)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(Color.blue.opacity(0.1))
-            .foregroundColor(.blue)
             .cornerRadius(4)
             .frame(height: 24) // 高さを統一
-            .disabled(mcpConnectionViewModel.isConnecting)
-            
-            Button(action: {
-                showServerDetails.toggle()
-            }) {
-                Image(systemName: showServerDetails ? "chevron.up" : "chevron.down")
-                    .font(.caption2)
-                    .imageScale(.small)
-            }
-            .foregroundColor(.blue)
-            .frame(width: 24, height: 24) // サイズを統一
-            .background(Color.blue.opacity(0.1))
-            .cornerRadius(4)
         }
         .frame(height: 24) // HStack全体の高さを統一
     }
