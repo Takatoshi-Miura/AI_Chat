@@ -243,7 +243,11 @@ struct ChatView: View {
         MessageInputView(
             inputText: $viewModel.inputText,
             isInputFocused: $isInputFocused,
-            onSend: viewModel.sendMessage
+            onSend: viewModel.sendMessage,
+            onImageTap: {
+                print("画像選択ボタンがタップされました")
+                // TODO: 将来的にPhotoPicker機能を実装
+            }
         )
         .disabled(viewModel.isLoading)
     }

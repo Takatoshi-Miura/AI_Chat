@@ -5,9 +5,21 @@ struct MessageInputView: View {
     @Binding var inputText: String
     @FocusState.Binding var isInputFocused: Bool
     let onSend: () -> Void
+    let onImageTap: () -> Void
     
     var body: some View {
         HStack(spacing: 12) {
+            // 画像選択ボタン
+            Button(action: onImageTap) {
+                Image(systemName: "photo")
+                    .font(.system(size: 18))
+                    .foregroundColor(.blue)
+                    .frame(width: 40, height: 40)
+                    .background(Color(.systemGray6))
+                    .clipShape(Circle())
+            }
+            .accessibilityLabel("画像を選択")
+            
             TextField(LocalizedStrings.messagePlaceholder, text: $inputText, axis: .vertical)
                 .focused($isInputFocused)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
@@ -48,6 +60,7 @@ struct MessageInputView: View {
     return MessageInputView(
         inputText: $inputText,
         isInputFocused: $isInputFocused,
-        onSend: { print("Send message: \(inputText)") }
+        onSend: { print("Send message: \(inputText)") },
+        onImageTap: { print("Image tap") }
     )
 } 
