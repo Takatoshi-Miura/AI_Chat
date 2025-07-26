@@ -19,13 +19,27 @@ struct MessageRowView: View {
     
     private var userMessageView: some View {
         VStack(alignment: .trailing, spacing: 4) {
-            Text(message.text)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(18)
-                .textSelection(.enabled)
+            VStack(alignment: .trailing, spacing: 8) {
+                // 画像表示
+                if let image = message.image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: 200, maxHeight: 150)
+                        .cornerRadius(12)
+                }
+                
+                // テキストメッセージ（空でない場合のみ表示）
+                if !message.text.isEmpty {
+                    Text(message.text)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(18)
+                        .textSelection(.enabled)
+                }
+            }
             
             Text(formatTimestamp(message.timestamp))
                 .font(.caption2)
@@ -47,13 +61,26 @@ struct MessageRowView: View {
                             .foregroundColor(.primary)
                     )
                 
-                // メッセージ内容
-                Text(message.text)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(18)
-                    .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 8) {
+                    // 画像表示
+                    if let image = message.image {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: 200, maxHeight: 150)
+                            .cornerRadius(12)
+                    }
+                    
+                    // テキストメッセージ（空でない場合のみ表示）
+                    if !message.text.isEmpty {
+                        Text(message.text)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(18)
+                            .textSelection(.enabled)
+                    }
+                }
             }
             
             Text(formatTimestamp(message.timestamp))
