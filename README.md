@@ -10,6 +10,7 @@ MCPサーバーとの連携により、リアルタイムの天気予報など�
 - **MCP 統合**: Model Context ProtocolによるTool Calling
 - **OAuth 2.0 認証**: MCPサーバーとの安全な接続
 - **外部ツール連携**: 天気予報MCPサーバーとの通信
+- **画像チャット機能**: カメラロールから画像を選択してAIと会話
 - **SwiftUI + MVVM**: モダンなiOSアーキテクチャ
 - **完全日本語対応**: すべてのUIとメッセージが日本語
 - **段階的応答表示**: MCPツール実行過程の可視化
@@ -21,6 +22,13 @@ MCPサーバーとの連携により、リアルタイムの天気予報など�
 - **接続状況管理**: サーバー接続の監視と再接続機能
 - **動的ツール生成**: MCPツールの自動検出と統合
 - **トークン永続化**: 認証トークンの安全な保存
+
+### 📷 画像チャット機能
+- **カメラロール統合**: PhotosPickerによる画像選択
+- **画像プレビュー**: 送信前の画像確認機能
+- **画像圧縮**: 自動リサイズ（1024x1024以下、JPEG 80%品質）
+- **画像表示**: チャット画面での画像表示対応
+- **マルチモーダル**: 画像とテキストの同時送信
 
 ## 📋 技術仕様
 
@@ -34,12 +42,13 @@ MCPサーバーとの連携により、リアルタイムの天気予報など�
 - `FoundationModels` - Apple Intelligence統合
 - `MCP` - Model Context Protocol クライアント
 - `SwiftUI` - ユーザーインターフェース
+- `PhotosUI` - 画像選択機能
 - `Combine` - リアクティブプログラミング
 - `Foundation` - 基本ライブラリ
 - `AuthenticationServices` - OAuth 2.0 認証
 
 ### 依存関係
-- [MCP Swift SDK](https://github.com/modelcontextprotocol/swift-sdk) v1.0.0以上
+- [MCP Swift SDK](https://github.com/modelcontextprotocol/swift-sdk) v0.9.0以上
 
 ## 🏗️ アーキテクチャ
 
@@ -50,16 +59,18 @@ View Layer (SwiftUI)
 ├── ChatView.swift                       # メインチャット画面
 ├── OAuthView.swift                      # OAuth認証管理
 ├── OAuthWebView.swift                   # OAuth認証Web画面
-├── AuthenticationManagementView.swift   # 認証管理画面
+├── MCPServerInfoModalView.swift         # MCPサーバー情報モーダル
 └── Common/                              # 共通コンポーネント
+    ├── MessageInputView.swift           # メッセージ入力（画像選択機能含む）
+    └── MessageRowView.swift             # メッセージ表示（画像表示対応）
 
 ViewModel Layer
-├── ChatViewModel.swift                  # チャット状態管理
+├── ChatViewModel.swift                  # チャット状態管理（画像選択機能含む）
 ├── MCPConnectionViewModel.swift         # MCP接続状態管理
 └── AuthenticationViewModel.swift       # 認証状態管理
 
 Model Layer
-├── ChatMessage.swift                    # メッセージデータモデル
+├── ChatMessage.swift                    # メッセージデータモデル（画像データ対応）
 └── DynamicMCPTool.swift                 # 動的MCPツール
 
 Service Layer
@@ -163,6 +174,26 @@ Xcodeが自動的にSwift Package Manager経由でMCP SDKをダウンロード�
 AI: こんにちは！何かお手伝いできることはありますか？天気予報もお聞きできます！
 ```
 
+### 画像を使った会話
+```
+ユーザー: [画像アイコンをタップして写真を選択]
+       [選択した画像がプレビュー表示される]
+ユーザー: この写真について教えて
+AI: 送信いただいた画像を確認しました。この写真には...
+```
+
+#### 画像機能の使い方
+1. **画像選択**: 入力欄左端の📷アイコンをタップ
+2. **写真選択**: カメラロールから画像を選択
+3. **プレビュー確認**: 選択した画像が入力欄上部に表示
+4. **テキスト入力**: 必要に応じて説明文を追加
+5. **送信**: 送信ボタンで画像とテキストを同時送信
+
+#### 対応する操作
+- **画像のみ送信**: テキストなしでも送信可能
+- **画像削除**: プレビュー右上の×ボタンで取り消し
+- **画像+テキスト**: 画像と説明文の同時送信
+
 ### MCPツールの利用
 ```
 ユーザー: 東京の天気はどうですか？
@@ -255,6 +286,13 @@ let mcpServerURLs: [URL] = [
 - `LocalizedString.swift`で多言語対応の追加
 
 ## 📝 リリース情報
+
+### Version 1.1
+- **画像チャット機能追加**: カメラロールから画像を選択してAIと会話
+- **PhotosUI統合**: ネイティブな画像選択体験
+- **画像プレビュー機能**: 送信前の画像確認
+- **自動画像圧縮**: メモリ効率の最適化
+- **マルチモーダル対応**: 画像とテキストの同時送信
 
 ### Version 1.0
 - Apple Intelligence統合
