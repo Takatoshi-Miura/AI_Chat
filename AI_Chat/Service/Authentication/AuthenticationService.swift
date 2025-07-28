@@ -27,9 +27,8 @@ protocol AuthenticationServiceProtocol {
 @MainActor
 class AuthenticationService: NSObject, AuthenticationServiceProtocol, ObservableObject {
     // MARK: - OAuth設定
-    private let clientId = "client_f6d49594-1ef7-4128-8d54-7ab94284a4da"
-    private let clientSecret = "secret_023ee679-9055-4eb7-9743-2fdff213ce0e"
     private let redirectUri = "ai-chat://oauth/callback"
+    private let configurationService: MCPConfigurationServiceProtocol
     
     // MARK: - Published Properties
     @Published var isAuthenticated = false
@@ -46,7 +45,8 @@ class AuthenticationService: NSObject, AuthenticationServiceProtocol, Observable
         $isAuthenticated.eraseToAnyPublisher()
     }
     
-    override init() {
+    init(configurationService: MCPConfigurationServiceProtocol) {
+        self.configurationService = configurationService
         super.init()
         checkAuthenticationStatus()
     }
@@ -178,10 +178,14 @@ class AuthenticationService: NSObject, AuthenticationServiceProtocol, Observable
     }
     
     private func buildAuthorizationURL(serverURL: URL) -> URL {
+        guard let configuration = configurationService.getConfiguration(for: serverURL) else {
+            fatalError("設定が見つかりません: \(serverURL)")
+        }
+        
         var components = URLComponents(url: serverURL, resolvingAgainstBaseURL: false)!
         components.path = "/oauth/authorize"
         components.queryItems = [
-            URLQueryItem(name: "client_id", value: clientId),
+            URLQueryItem(name: "client_id", value: configuration.clientId),
             URLQueryItem(name: "redirect_uri", value: redirectUri),
             URLQueryItem(name: "response_type", value: "code"),
             URLQueryItem(name: "state", value: "ai-chat-auth-\(UUID().uuidString)")
@@ -196,6 +200,12 @@ class AuthenticationService: NSObject, AuthenticationServiceProtocol, Observable
     }
     
     private func exchangeCodeForToken(_ code: String, serverURL: URL) async throws -> String {
+        guard let configuration = configurationService.getConfiguration(for: serverURL) else {
+            throw AuthenticationError.invalidConfiguration
+        }
+        
+        let clientSecret = configuration.clientSecret
+        
         let tokenURL = serverURL.appendingPathComponent("/oauth/token")
         
         MCPStepNotificationService.shared.notifyStep("トークン交換URL: \(tokenURL.absoluteString)")
@@ -207,7 +217,7 @@ class AuthenticationService: NSObject, AuthenticationServiceProtocol, Observable
         let parameters = [
             "grant_type": "authorization_code",
             "code": code,
-            "client_id": clientId,
+            "client_id": configuration.clientId,
             "client_secret": clientSecret,
             "redirect_uri": redirectUri
         ]
@@ -288,6 +298,7 @@ enum AuthenticationError: LocalizedError {
     case invalidResponse
     case tokenExchangeFailed(String)
     case invalidTokenResponse
+    case invalidConfiguration
     
     var errorDescription: String? {
         switch self {
@@ -303,6 +314,8 @@ enum AuthenticationError: LocalizedError {
             return "トークンの取得に失敗しました: \(message)"
         case .invalidTokenResponse:
             return "無効なトークンレスポンスです"
+        case .invalidConfiguration:
+            return "サーバー設定が見つかりません"
         }
     }
 }

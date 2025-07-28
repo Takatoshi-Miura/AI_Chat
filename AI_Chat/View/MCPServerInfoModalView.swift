@@ -219,8 +219,9 @@ struct ServerInfo {
 }
 
 #Preview {
-    let authService = AuthenticationService()
-    let connectionRepository = MCPConnectionRepository()
+    let configurationService = MCPConfigurationService()
+    let authService = AuthenticationService(configurationService: configurationService)
+    let connectionRepository = MCPConnectionRepository(configurationService: configurationService)
     let aiService = AIService()
     
     MCPServerInfoModalView(

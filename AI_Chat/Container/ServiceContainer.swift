@@ -8,12 +8,13 @@ class ServiceContainer: ObservableObject {
     
     // MARK: - Services
     private(set) lazy var aiService = AIService()
-    private(set) lazy var authenticationService: AuthenticationServiceProtocol = AuthenticationService()
+    private(set) lazy var mcpConfigurationService: MCPConfigurationServiceProtocol = MCPConfigurationService()
+    private(set) lazy var authenticationService: AuthenticationServiceProtocol = AuthenticationService(configurationService: mcpConfigurationService)
     private(set) lazy var chatService = ChatService(aiService: aiService)
     
     // MARK: - Repositories
     private(set) lazy var chatRepository = ChatRepository()
-    private(set) lazy var mcpConnectionRepository = MCPConnectionRepository()
+    private(set) lazy var mcpConnectionRepository = MCPConnectionRepository(configurationService: mcpConfigurationService)
     
     // MARK: - Computed Services
     lazy var mcpConnectionService: MCPConnectionServiceProtocol = {

@@ -26,6 +26,9 @@ protocol MCPConnectionRepositoryProtocol {
     
     /// サーバーが失敗状態かチェック
     func isServerFailed(_ serverName: String) -> Bool
+    
+    /// 有効なMCPサーバーのURL一覧を取得
+    var mcpServerURLs: [URL] { get }
 }
 
 @MainActor
@@ -33,11 +36,16 @@ class MCPConnectionRepository: MCPConnectionRepositoryProtocol, ObservableObject
     @Published private(set) var connectedServers: Set<String> = []
     @Published private(set) var failedServers: Set<String> = []
     
-    /// MCPサーバーのURL一覧（設定）
-    let mcpServerURLs: [URL] = [
-        URL(string: "https://mcp-weather.get-weather.workers.dev")!,
-        // 追加可能
-    ]
+    private let configurationService: MCPConfigurationServiceProtocol
+    
+    init(configurationService: MCPConfigurationServiceProtocol) {
+        self.configurationService = configurationService
+    }
+    
+    /// 有効なMCPサーバーのURL一覧を取得（設定サービスから）
+    var mcpServerURLs: [URL] {
+        return configurationService.getEnabledConfigurations().map { $0.serverURL }
+    }
     
     func getConnectedServers() -> Set<String> {
         return connectedServers
@@ -77,10 +85,11 @@ class MCPConnectionRepository: MCPConnectionRepositoryProtocol, ObservableObject
     
     /// 接続統計を取得
     func getConnectionStatistics() -> (connected: Int, failed: Int, total: Int) {
+        let totalServers = configurationService.getEnabledConfigurations().count
         return (
             connected: connectedServers.count,
             failed: failedServers.count,
-            total: mcpServerURLs.count
+            total: totalServers
         )
     }
     
