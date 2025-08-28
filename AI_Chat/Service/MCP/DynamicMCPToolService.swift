@@ -20,7 +20,7 @@ class DynamicMCPToolService {
         }
     }
     
-    /// MCPツールから動的にFoundationModels.Toolを作成
+    /// MCPツール情報から動的にFoundationModels.Toolを作成
     /// - Parameter mcpTool: MCPツール
     /// - Returns: 作成されたFoundationModels.Tool
     private func createDynamicTool(from mcpTool: MCP.Tool) -> any FoundationModels.Tool {

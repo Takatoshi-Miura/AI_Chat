@@ -6,13 +6,37 @@ import MCP
 struct DynamicMCPTool: FoundationModels.Tool {
     let name: String
     let description: String
-    private let inputSchema: [String: Any]?
+    private let inputSchema: [String: Sendable]?
     private let mcpService: MCPClientService
+    
+    typealias Output = String
     
     init(toolName: String, toolDescription: String, inputSchema: [String: Any]?, mcpService: MCPClientService) {
         self.name = toolName
         self.description = toolDescription
-        self.inputSchema = inputSchema
+        // [String: Any]を[String: Sendable]に変換
+        if let schema = inputSchema {
+            // Sendableな値のみを保持
+            var sendableSchema: [String: Sendable] = [:]
+            for (key, value) in schema {
+                if let stringValue = value as? String {
+                    sendableSchema[key] = stringValue
+                } else if let intValue = value as? Int {
+                    sendableSchema[key] = intValue
+                } else if let doubleValue = value as? Double {
+                    sendableSchema[key] = doubleValue
+                } else if let boolValue = value as? Bool {
+                    sendableSchema[key] = boolValue
+                } else if let arrayValue = value as? [String] {
+                    sendableSchema[key] = arrayValue
+                } else if let dictValue = value as? [String: String] {
+                    sendableSchema[key] = dictValue
+                }
+            }
+            self.inputSchema = sendableSchema
+        } else {
+            self.inputSchema = nil
+        }
         self.mcpService = mcpService
     }
     
@@ -22,9 +46,9 @@ struct DynamicMCPTool: FoundationModels.Tool {
         var input: String = ""
     }
     
-    func call(arguments: Arguments) async throws -> ToolOutput {
+    func call(arguments: Arguments) async throws -> String {
         let result = await executeMCPTool(input: arguments.input)
-        return ToolOutput(result)
+        return result
     }
     
     /// MCPツールを実行
@@ -41,7 +65,7 @@ struct DynamicMCPTool: FoundationModels.Tool {
     private func performMCPToolCall(input: String) async -> String {
         do {
             // 引数を準備
-            let mcpArguments = try prepareArguments(input: input)
+            let mcpArguments = try await prepareArguments(input: input)
             
             // MCPサービスを通じてツールを呼び出し
             let (result, isError) = try await mcpService.callTool(
@@ -65,22 +89,23 @@ struct DynamicMCPTool: FoundationModels.Tool {
     /// 引数を準備
     /// - Parameter input: メイン入力値
     /// - Returns: MCP用の引数辞書
-    private func prepareArguments(input: String) throws -> [String: Value] {
+    @MainActor
+    private func prepareArguments(input: String) async throws -> [String: Value] {
         var arguments: [String: Any] = [:]
         
         print("=== Preparing arguments for \(name) ===")
         print("Input: '\(input)'")
         
         // スキーマ情報を詳しく解析（ネストされた構造に対応）
-        var actualSchema: [String: Any]?
+        var actualSchema: [String: Sendable]?
         var requiredFields: [String] = []
-        var properties: [String: Any] = [:]
+        var properties: [String: Sendable] = [:]
         
         if let schema = inputSchema {
             print("Raw schema: \(schema)")
             
             // "some"キーの下にネストされている場合
-            if let someSchema = schema["some"] as? [String: Any] {
+            if let someSchema = schema["some"] as? [String: Sendable] {
                 actualSchema = someSchema
                 print("Found nested schema under 'some': \(someSchema)")
             } else {
@@ -88,7 +113,7 @@ struct DynamicMCPTool: FoundationModels.Tool {
             }
             
             if let actualSchema = actualSchema {
-                if let schemaProperties = actualSchema["properties"] as? [String: Any] {
+                if let schemaProperties = actualSchema["properties"] as? [String: Sendable] {
                     properties = schemaProperties
                     print("Schema properties: \(properties)")
                 }
@@ -122,7 +147,7 @@ struct DynamicMCPTool: FoundationModels.Tool {
         print("Final arguments before conversion: \(arguments)")
         
         // MCP Value形式に変換
-        let convertedArguments = mcpService.convertArguments(arguments)
+        let convertedArguments = await mcpService.convertArguments(arguments)
         print("Converted MCP arguments: \(convertedArguments)")
         print("=====================================")
         
